@@ -68,7 +68,7 @@ def login():
         password = request.form['password']
 
         
-        user = employeesTable.find_one({"employeeId":employeeId})
+        user = employeesTable.find_one({"adminAddress":employeeId})
 
         
         if user and check_password_hash(user['password'], password):

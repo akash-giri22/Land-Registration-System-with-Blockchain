@@ -10,7 +10,7 @@ async function connectToBlockchain()
   // checking Meta-Mask extension is added or not
   if (window.ethereum){
 
-    window.web3  = new Web3(ethereum);
+    window.web3 = new Web3(window.ethereum);
 
     // web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:7545'));
 

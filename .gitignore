@@ -1,0 +1,8 @@
+venv/
+ganache-data/
+__pycache__/
+*.pyc
+*.backup
+*.backup.txt
+
+Server_For_Revenue_Dept/config.json
