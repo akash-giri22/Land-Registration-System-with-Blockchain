@@ -7,7 +7,7 @@ import os
 
 
 # blockchain Network ID
-NETWORK_CHAIN_ID = "1790183260134"
+NETWORK_CHAIN_ID = "31337"
 
 
 
