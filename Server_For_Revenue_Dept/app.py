@@ -289,7 +289,7 @@ if __name__ == '__main__':
                 exit(0)
        
         # Start Server
-        app.run(debug=True,port=5001)
+        app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5001)))
 
     else:
         print("Admin Address Details Not found in Configuration file")
