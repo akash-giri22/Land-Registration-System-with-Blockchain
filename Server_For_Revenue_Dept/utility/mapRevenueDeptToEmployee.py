@@ -7,8 +7,15 @@ import json
 
 
 def mapRevenueDeptIdToEmployee(revenueDeptId,employeeId):
-    with open("config.json","r") as f:
-        config = json.load(f)
+    config = {}
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.json")
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+    config["Ganache_Url"] = os.environ.get("GANACHE_URL", config.get("Ganache_Url", "http://127.0.0.1:8545"))
+    config["Address_Used_To_Deploy_Contract"] = os.environ.get("ADDRESS_USED_TO_DEPLOY_CONTRACT", config.get("Address_Used_To_Deploy_Contract", ""))
+    config["NETWORK_CHAIN_ID"] = os.environ.get("NETWORK_CHAIN_ID", config.get("NETWORK_CHAIN_ID", "31337"))
 
 
     # Connect to the Ganache network using Web3.py
