@@ -1,179 +1,182 @@
-
 async function checkConnection()
 {
-    
-  // checking Meta-Mask extension is added or not
-  if (window.ethereum){
-
-    try{
-    //   await ethereum.enable();
-
-      window.web3  = new Web3(ethereum);
-
-      const accounts = await web3.eth.getAccounts();
-
-      const account = accounts[0];
-
-      console.log("Connected To metamask:", account);
-      console.log("Account Used to Login:",window.localStorage["userAddress"])
-      console.log(account != window.localStorage["userAddress"]);
-
-      if( account != window.localStorage["userAddress"])
-      {
-        alert("wrong account detected..!! please connect again");
-
-        window.location.href = "/";
-      }
-      else
-      {
-        console.log("No Account changes detected !!");
-
-        alertUser(`Wallet Connected : <span id="connectedAccount">${account.slice(0,6)}...${account.slice(-4)} </span>`,'alert-success','block');
-      }
-
-    }catch(error){
-
-      alert(error);
-
-    }
-
-  }else{
-    alert("Please Add Metamask extension for your browser !!");
+  if (!window.ethereum) {
+    alert("Please add MetaMask extension for your browser.");
+    return;
   }
 
+  try {
+    window.web3 = new Web3(window.ethereum);
+
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const account = accounts[0];
+
+    console.log("Connected To MetaMask:", account);
+    console.log("Account Used To Register:", window.localStorage["userAddress"]);
+
+    // Keep the selected MetaMask account in sync.
+    window.localStorage.setItem("userAddress", account);
+
+    const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
+    const contractAddress = window.localStorage.Users_ContractAddress;
+    const contract = new window.web3.eth.Contract(contractABI, contractAddress);
+
+    // If this wallet is already registered, do NOT send another transaction.
+    // The smart contract correctly rejects duplicate registration.
+    const userDetails = await contract.methods.users(account).call();
+
+    if (userDetails && userDetails.userID &&
+        userDetails.userID.toLowerCase() === account.toLowerCase()) {
+      alertUser(
+        `This wallet is already registered. Redirecting to your dashboard...`,
+        "alert-info",
+        "block"
+      );
+
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 900);
+      return;
+    }
+
+    alertUser(
+      `Wallet Connected : <span id="connectedAccount">${account.slice(0,6)}...${account.slice(-4)}</span>`,
+      "alert-success",
+      "block"
+    );
+
+  } catch (error) {
+    console.error("Wallet/registration check failed:", error);
+    alertUser(showError(error), "alert-danger", "block");
+  }
 }
 
 
 async function registerUser(event)
 {
-  
   event.preventDefault();
 
-  alertUser("","alert-info","none");
+  alertUser("", "alert-info", "none");
 
-  let fname = document.getElementById("firstName").value;
-  let lname = document.getElementById("lastName").value;
-  let dob = document.getElementById("dob").value;
-  let aadharNo = document.getElementById("aadharNo").value;
+  const fname = document.getElementById("firstName").value.trim();
+  const lname = document.getElementById("lastName").value.trim();
+  const dob = document.getElementById("dob").value;
+  const aadharNo = document.getElementById("aadharNo").value.trim();
 
-  
+  if (!/^[0-9]{12}$/.test(aadharNo)) {
+    alertUser("Aadhar number must contain exactly 12 digits.", "alert-danger", "block");
+    return;
+  }
 
-  let contractABI = JSON.parse(window.localStorage.Users_ContractABI);
-  let contractAddress = window.localStorage.Users_ContractAddress;
+  const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
+  const contractAddress = window.localStorage.Users_ContractAddress;
+  const contract = new window.web3.eth.Contract(contractABI, contractAddress);
 
-  window.contract = new window.web3.eth.Contract(contractABI,contractAddress);
+  try {
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    const connectedAccount = accounts[0];
 
-  let accountUsedToLogin = window.localStorage["userAddress"];
-  
-  try{
-    const accounts = await web3.eth.getAccounts();
-    const connectedAccountToMetaMask = accounts[0];
+    // Always use the currently connected wallet.
+    window.localStorage.setItem("userAddress", connectedAccount);
 
-    if (connectedAccountToMetaMask == accountUsedToLogin)
-    {
+    // IMPORTANT: Check first, before opening a MetaMask transaction.
+    const existingUser = await contract.methods.users(connectedAccount).call();
 
-      showTransactionLoading("Registering User....");
+    if (existingUser && existingUser.userID &&
+        existingUser.userID.toLowerCase() === connectedAccount.toLowerCase()) {
+      closeTransactionLoading();
+      alertUser(
+        "This wallet is already registered. Redirecting to your dashboard...",
+        "alert-info",
+        "block"
+      );
 
-      window.result = await contract.methods.registerUser(fname,lname,dob,aadharNo)
-                                            .send({from:accountUsedToLogin});
-      
-
-      userDetails = await contract.methods.users(accountUsedToLogin)
-                            .call()
-                            .then(
-                              function(value){
-                                return value;
-                              });
-
-      console.log(userDetails);
-
-      if (userDetails["userID"]== accountUsedToLogin){
-        // registarion successfull
-        console.log("Registered Successfully");
-        showTransactionLoading(`Registered Successfully <br> Redirecting to Dashboard`);
-        
-        // redirect to dashboard
+      setTimeout(() => {
         window.location.href = "/dashboard";
-      }
-      else
-      {
-        closeTransactionLoading()
-        alertUser(`Registration Failed! Try again`,"alert-danger","block");
-      }
+      }, 900);
+      return;
     }
-    else
-    {
-      alertUser(`Account MisMatched Please Connect your account "${accountUsedToLogin.slice(0,6)}...${accountUsedToLogin.slice(-4)}" to Metamask`,"alert-warning","block");
-    }
-  }
-  catch(error)
-  {
-    reason = showError(error);
 
+    showTransactionLoading("Registering User...");
+
+    await contract.methods
+      .registerUser(fname, lname, dob, aadharNo)
+      .send({ from: connectedAccount });
+
+    const userDetails = await contract.methods.users(connectedAccount).call();
+
+    if (userDetails && userDetails.userID &&
+        userDetails.userID.toLowerCase() === connectedAccount.toLowerCase()) {
+      showTransactionLoading("Registered Successfully<br>Redirecting to Dashboard");
+
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 700);
+    } else {
+      closeTransactionLoading();
+      alertUser("Registration failed. Please try again.", "alert-danger", "block");
+    }
+
+  } catch (error) {
+    console.error("Registration failed:", error);
     closeTransactionLoading();
-    alertUser(reason,"alert-danger","block");
+    alertUser(showError(error), "alert-danger", "block");
   }
-  
-
 }
-
-
 
 
 function showTransactionLoading(msg) {
+  const loadingDiv = document.getElementById("loadingDiv");
 
-  loadingDiv = document.getElementById("loadingDiv");
-
-  loadingDiv.children[0].innerHTML = msg;
-
+  loadingDiv.children[0].innerHTML = msg || "Processing...";
   loadingDiv.style.display = "block";
 }
 
-function closeTransactionLoading() {
-  loadingDiv = document.getElementById("loadingDiv");
 
+function closeTransactionLoading() {
+  const loadingDiv = document.getElementById("loadingDiv");
   loadingDiv.style.display = "none";
 }
 
 
-// show error reason to user
 function showError(errorOnTransaction) {
-
-
-  errorCode = errorOnTransaction.code;
-
-  if(errorCode==4001){
-    return "Rejected Transaction";
+  if (!errorOnTransaction) {
+    return "Registration failed. Please try again.";
   }
-  else{
-    let start = errorOnTransaction.message.indexOf('{');
-    let end = -1;
-  
-    errorObj = JSON.parse(errorOnTransaction.message.slice(start, end));
-  
-    errorObj = errorObj.value.data.data;
-  
-    txHash = Object.getOwnPropertyNames(errorObj)[0];
-  
-    let reason = errorObj[txHash].reason;
-  
-    return reason;
+
+  if (errorOnTransaction.code === 4001) {
+    return "Transaction rejected in MetaMask.";
   }
+
+  const message = String(errorOnTransaction.message || errorOnTransaction);
+
+  // Web3/MetaMask error formats vary. Try to extract the Solidity revert reason.
+  const knownReasons = [
+    "User already registered",
+    "Aadhar number already registered",
+    "User does not exist"
+  ];
+
+  for (const reason of knownReasons) {
+    if (message.includes(reason)) {
+      return reason;
+    }
+  }
+
+  return message.length > 300
+    ? message.slice(0, 300) + "..."
+    : message;
 }
 
 
-function alertUser(msg,msgType,display){
+function alertUser(msg, msgType, display) {
+  console.log(msg, display);
 
-  console.log(msg,display);
-  notifyUser = document.getElementById("notifyUser");
+  const notifyUser = document.getElementById("notifyUser");
 
   notifyUser.classList = [];
   notifyUser.classList.add("alert");
   notifyUser.classList.add(msgType);
   notifyUser.innerHTML = msg;
   notifyUser.style.display = display;
-
-
-  
 }
-
