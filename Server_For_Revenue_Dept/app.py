@@ -39,7 +39,7 @@ NETWORK_CHAIN_ID = str(config["NETWORK_CHAIN_ID"])
 
 
 # connect to mong db
-client = MongoClient(config["Mongo_Db_Url"])
+client = MongoClient(config["Mongo_Db_Url"], serverSelectionTimeoutMS=3000, connectTimeoutMS=3000)
 
 # connect to database
 LandRegistryDB = client.LandRegistry
@@ -77,23 +77,29 @@ def login():
         employeeId = request.form['employeeId']
         password = request.form['password']
 
-        
+        # Bootstrap admin login from Render environment variables.
+        if employeeId == adminAddress and adminPassword and password == adminPassword:
+            session['user_id'] = 'render-admin'
+            return jsonify({'status':1,
+                            "msg":'Login Success',
+                            "revenueDepartmentId":"ADMIN",
+                            "empName":"Revenue Department Admin"
+                            })
+
         user = employeesTable.find_one({"adminAddress":employeeId})
 
-        
         if user and check_password_hash(user['password'], password):
             session['user_id'] = str(user['_id'])
             return jsonify({'status':1,
                             "msg":'Login Success',
-                            "revenueDepartmentId":user['revenueDeptId'],
-                            "empName":user['fname']
+                            "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'),
+                            "empName":user.get('fname', 'Revenue Department Admin')
                             })
         else:
             return jsonify({'status':0,"msg":'Invalid Wallet or password'})
 
     else:
         return jsonify({'status':0,"msg":'GET Not allowed'})
-
 
 
 @app.route('/logout')
@@ -192,14 +198,18 @@ def adminIndexPage():
 @app.route("/adminLogin", methods=['POST'])
 def adminLogin():
 
-
-
     if request.method == 'POST':
-        adminAddress = request.form['adminAddress']
+        adminAddressForm = request.form['adminAddress']
         password = request.form['password']
 
-        admin = employeesTable.find_one({'adminAddress': adminAddress})
+        # Bootstrap admin login from Render environment variables.
+        if adminAddressForm == adminAddress and adminPassword and password == adminPassword:
+            session['user_id'] = 'render-admin'
+            return jsonify({'status':1,
+                            "msg":'Admin Login Success'
+                            })
 
+        admin = employeesTable.find_one({'adminAddress': adminAddressForm})
 
         if admin and check_password_hash(admin['password'], password):
             session['user_id'] = str(admin['_id'])
@@ -211,8 +221,6 @@ def adminLogin():
 
     else:
         return jsonify({'status':0,"msg":'GET Not allowed'})
-
-
 
 
 
