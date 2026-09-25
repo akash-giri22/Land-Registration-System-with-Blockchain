@@ -1,141 +1,103 @@
-
-
-
-
 async function connectToBlockchain()
 {
+  const notifyUser = document.getElementById("notifyUser");
 
-  notifyUser = document.getElementById("notifyUser");
-
-  // checking Meta-Mask extension is added or not
-  if (window.ethereum){
-
-    window.web3 = new Web3(window.ethereum);
-
-    // web3 = new Web3(new Web3.providers.HttpProvider('http://localhost:7545'));
-
-    try{
-
-      showTransactionLoading()
-
-      // await ethereum.enable();
-
-      await window.ethereum.request({
-        method: "wallet_requestPermissions",
-        params: [
-          {
-            eth_accounts: {}
-          }
-        ]
-      });
-
-      const accounts = await web3.eth.getAccounts();
-      window.localStorage.setItem("userAddress",accounts[0]);
-
-      window.userAddress = accounts[0];
-     
-
-      // check whether user registered or not
-      let contractABI = JSON.parse(window.localStorage.Users_ContractABI);
-    
-      let contractAddress = window.localStorage.Users_ContractAddress;
-    
-      let contract = new window.web3.eth.Contract(contractABI,contractAddress);
-
-      userDetails = await contract.methods.users(accounts[0])
-                                          .call()
-                                          .then(
-                                            function(value){
-                                              return value;
-                                            });
-
-      console.log(userDetails);
-
-
-      loadingDiv = document.getElementById("loadingDiv");
-      loadingDiv.style.color = "green";
-
-      if (userDetails["userID"]== accounts[0]){
-        // registarion successfull
-        console.log("User Alreay Registered .. Redirecting to login");
-
-        loadingDiv.innerHTML = `Connected with : ${accounts[0]}
-                                <br>
-                                Redirecting to Login
-                                `;
-                                
-        // redirect to dashboard
-        window.location.href = "/dashboard";
-      }
-      else
-      {
-        console.log("User Not registered.. Redirecting to register");
-
-        loadingDiv.innerHTML = `Connected with : ${accounts[0]}
-                                <br>
-                                Redirecting to Register page
-                                `;
-                
-        // redirect to register
-        window.location.href = "/register";
-      }
-
-    }catch(error){
-
-      console.log(error);
-      notifyUser.innerText = showError(error);
-      notifyUser.style.display = "block";
-
-    }
-
-  }else{
-    // alert("Please Add Metamask extension for your browser !!");
+  if (!window.ethereum) {
     notifyUser.classList.add("alert-danger");
     notifyUser.style.display = "block";
-    notifyUser.innerText = "Please Add Metamask extension for your browser !!";
+    notifyUser.innerText = "Please Add MetaMask extension for your browser !!";
+    return;
   }
 
+  try {
+    window.web3 = new Web3(window.ethereum);
+    showTransactionLoading();
+
+    // Request the currently selected MetaMask account.
+    const accounts = await window.ethereum.request({
+      method: "eth_requestAccounts"
+    });
+
+    if (!accounts || accounts.length === 0) {
+      throw new Error("No MetaMask account selected.");
+    }
+
+    const account = accounts[0];
+    window.localStorage.setItem("userAddress", account);
+    window.userAddress = account;
+
+    const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
+    const contractAddress = window.localStorage.Users_ContractAddress;
+    const contract = new window.web3.eth.Contract(contractABI, contractAddress);
+
+    const userDetails = await contract.methods.users(account).call();
+
+    loadingDiv = document.getElementById("loadingDiv");
+    loadingDiv.style.color = "green";
+
+    // Wallet already registered -> dashboard.
+    if (
+      userDetails &&
+      userDetails.userID &&
+      userDetails.userID.toLowerCase() === account.toLowerCase()
+    ) {
+      loadingDiv.innerHTML = `Connected with : ${account}
+                              <br>
+                              Account already registered. Redirecting to Dashboard...
+                              `;
+
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 500);
+    }
+    // New wallet -> registration page.
+    else {
+      loadingDiv.innerHTML = `Connected with : ${account}
+                              <br>
+                              New account detected. Redirecting to Register...
+                              `;
+
+      setTimeout(() => {
+        window.location.href = "/register";
+      }, 500);
+    }
+
+  } catch (error) {
+    console.log(error);
+    closeTransactionLoading();
+    notifyUser.innerText = error.message || "Unable to connect MetaMask.";
+    notifyUser.classList.add("alert-danger");
+    notifyUser.style.display = "block";
+  }
 }
 
 
+// Detect MetaMask account changes immediately.
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", function(accounts) {
+    if (!accounts || accounts.length === 0) {
+      localStorage.removeItem("userAddress");
+      window.location.href = "/";
+      return;
+    }
 
+    const newAccount = accounts[0];
+    const oldAccount = localStorage.getItem("userAddress");
+
+    if (oldAccount && oldAccount.toLowerCase() !== newAccount.toLowerCase()) {
+      localStorage.setItem("userAddress", newAccount);
+      window.location.href = "/";
+    }
+  });
+}
 
 
 function showTransactionLoading(){
-
   loadingDiv = document.getElementById("loadingDiv");
-
   loadingDiv.style.display = "block";
 }
 
 function closeTransactionLoading(){
   loadingDiv = document.getElementById("loadingDiv");
-
   loadingDiv.style.display = "none";
-} 
-
-
-
-
-
-
-// show error reason to user
-function showError(errorOnTransaction){
-
- 
-
-  let start = errorOnTransaction.message.indexOf('{'); 
-  let end = -1;
-
-  errorObj = JSON.parse( errorOnTransaction.message.slice(start,end));
-
-  errorObj = errorObj.value.data.data;
-
-  txHash = Object.getOwnPropertyNames(errorObj)[0];
-
-  let reason = errorObj[txHash].reason;
-
-  return reason;
-
-
 }
