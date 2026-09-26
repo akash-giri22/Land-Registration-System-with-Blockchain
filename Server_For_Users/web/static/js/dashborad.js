@@ -19,27 +19,34 @@ async function checkConnection() {
       console.log("Account used to login        :", window.localStorage["userAddress"])
       console.log(accountConnectedToMetaMask != window.localStorage["userAddress"]);
 
-      const loggedInAccount = window.localStorage["userAddress"];
+      // Always trust the wallet currently selected in MetaMask.
+// localStorage can contain an older wallet after an account switch.
+      const currentAccount = accountConnectedToMetaMask;
+      const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
+      const contractAddress = window.localStorage.Users_ContractAddress;
+      const contract = new window.web3.eth.Contract(contractABI, contractAddress);
 
-      // If MetaMask was switched to another wallet, invalidate the old
-      // dashboard session and send the user back to the Connect page.
-      if (!loggedInAccount ||
-          accountConnectedToMetaMask.toLowerCase() !== loggedInAccount.toLowerCase()) {
-        console.log("MetaMask account changed. Clearing old wallet session.");
+      const currentUser = await contract.methods.users(currentAccount).call();
 
+      if (
+        currentUser &&
+        currentUser.userID &&
+        currentUser.userID.toLowerCase() === currentAccount.toLowerCase()
+      ) {
+        // Sync the session to the wallet that is actually connected.
+        localStorage.setItem("userAddress", currentAccount);
+        window.userAddress = currentAccount;
+
+        console.log("Wallet verified:", currentAccount);
+
+        fetchUserDetails();
+        fetchPropertiesOfOwner();
+      } else {
+        // This wallet is not registered yet.
         localStorage.removeItem("userAddress");
         window.userAddress = null;
         window.location.href = "/";
-        return;
       }
-
-      console.log("Wallet matches the logged-in account.");
-
-      // fetch user details
-      fetchUserDetails();
-
-      // fetch properties
-      fetchPropertiesOfOwner();
 
     } catch (error) {
 
