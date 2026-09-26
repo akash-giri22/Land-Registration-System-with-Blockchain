@@ -19,21 +19,27 @@ async function checkConnection() {
       console.log("Account used to login        :", window.localStorage["userAddress"])
       console.log(accountConnectedToMetaMask != window.localStorage["userAddress"]);
 
-      if (accountConnectedToMetaMask != window.localStorage["userAddress"]) {
-        alert("Mismatch in account used to login and connected to metamask.. Please login again");
+      const loggedInAccount = window.localStorage["userAddress"];
 
+      // If MetaMask was switched to another wallet, invalidate the old
+      // dashboard session and send the user back to the Connect page.
+      if (!loggedInAccount ||
+          accountConnectedToMetaMask.toLowerCase() !== loggedInAccount.toLowerCase()) {
+        console.log("MetaMask account changed. Clearing old wallet session.");
+
+        localStorage.removeItem("userAddress");
+        window.userAddress = null;
         window.location.href = "/";
+        return;
       }
-      else {
-        console.log("No Account changes detected !!");
 
-        // fetch user details
-        fetchUserDetails();
+      console.log("Wallet matches the logged-in account.");
 
-        // fetch properties 
-        fetchPropertiesOfOwner();
+      // fetch user details
+      fetchUserDetails();
 
-      }
+      // fetch properties
+      fetchPropertiesOfOwner();
 
     } catch (error) {
 
