@@ -4,53 +4,50 @@
 
 async function checkConnection()
 {
-    
-  // checking Meta-Mask extension is added or not
-  if (window.ethereum){
-
-    try{
-    //   await ethereum.enable();
-
-      window.web3  = new Web3(ethereum);
-
-      const accounts = await web3.eth.getAccounts();
-
-      const accountConnectedToMetaMask = accounts[0];
-
-      console.log("Account Connected to MetaMask:", accountConnectedToMetaMask);
-      console.log("Account used to login        :",window.localStorage["userAddress"])
-      console.log(accountConnectedToMetaMask != window.localStorage["userAddress"]);
-
-      if( accountConnectedToMetaMask != window.localStorage["userAddress"])
-      {
-        alert("Mismatch in account used to login and connected to metamask.. Please login again");
-
-        window.location.href = "/";
-      }
-      else
-      {
-        console.log("No Account changes detected !!");
-
-        fetchUserDetails();
-
-        fetchMyRequestedSales();
-
-      }
-
-    }catch(error){
-
-      
-      showError(error);
-
-    }
-
-  }else{
-    alert("Please Add Metamask extension for your browser !!");
+  if (!window.ethereum) {
+    alert("Please Add MetaMask extension to your browser !!");
+    return;
   }
 
+  try {
+    window.web3 = new Web3(window.ethereum);
+
+    // Get the account currently selected in MetaMask.
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    if (!accounts || accounts.length === 0) {
+      localStorage.removeItem("userAddress");
+      window.location.href = "/";
+      return;
+    }
+
+    const connectedAccount = accounts[0];
+    const loggedInAccount = localStorage.getItem("userAddress");
+
+    console.log("Account Connected to MetaMask:", connectedAccount);
+    console.log("Account used to login:", loggedInAccount);
+
+    // Ethereum addresses are case-insensitive. MetaMask/Web3 can return the
+    // same address with different checksum casing, so always compare lowercase.
+    if (!loggedInAccount || connectedAccount.toLowerCase() !== loggedInAccount.toLowerCase()) {
+      alert("Mismatch in account used to login and connected to MetaMask. Please login again.");
+      localStorage.removeItem("userAddress");
+      window.location.href = "/";
+      return;
+    }
+
+    // Keep one normalized value for the rest of this page.
+    localStorage.setItem("userAddress", connectedAccount);
+    window.userAddress = connectedAccount;
+
+    console.log("Wallet verified successfully.");
+
+    fetchUserDetails();
+    fetchMyRequestedSales();
+  } catch (error) {
+    console.error("Wallet connection failed:", error);
+    alert(error.message || error);
+  }
 }
-
-
 
 async function fetchUserDetails() {
 
