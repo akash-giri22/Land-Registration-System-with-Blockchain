@@ -68,3 +68,13 @@ footer p{margin:0!important;text-align:center!important;font-size:13px!important
   #registerationFormDiv{margin:10px 0!important}
   #propertiesTable{border-radius:12px}
 }
+
+.lr-login-page{background:radial-gradient(circle at 15% 15%,#dbeafe 0,transparent 34%),radial-gradient(circle at 85% 25%,#ccfbf1 0,transparent 32%),#f8fafc!important}
+.lr-login-page header{box-shadow:none}
+.lr-login-page section{min-height:calc(100vh - 190px);display:flex;align-items:center;justify-content:center;padding:35px 20px}
+.lr-login-page section>div{width:min(520px,100%);background:rgba(255,255,255,.88);border:1px solid rgba(255,255,255,.9);border-radius:26px;padding:45px 42px!important;box-shadow:0 25px 70px rgba(15,23,42,.12);backdrop-filter:blur(14px);text-align:center}
+.lr-login-page section h2{text-transform:none!important;font-size:30px!important;color:#172033!important;margin:0 0 10px!important;font-weight:750!important}
+.lr-login-page section h2:after{content:"";display:block;width:55px;height:4px;border-radius:5px;background:linear-gradient(90deg,#2563eb,#14b8a6);margin:14px auto 24px}
+.lr-login-page section button{background:linear-gradient(135deg,#2563eb,#1d4ed8)!important;color:#fff!important;padding:14px 38px!important;font-size:16px!important;min-width:190px!important;box-shadow:0 12px 25px rgba(37,99,235,.25)!important}
+.lr-login-page section button:hover{transform:translateY(-2px)!important}
+.lr-login-page #notifyUser{position:fixed;top:25px;left:50%;transform:translateX(-50%);z-index:100}
