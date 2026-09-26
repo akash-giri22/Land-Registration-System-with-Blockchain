@@ -3,73 +3,86 @@
 
 async function checkConnection() {
 
-  // checking Meta-Mask extension is added or not
-  if (window.ethereum) {
-
-    try {
-      //   await ethereum.enable();
-
-      window.web3 = new Web3(ethereum);
-
-      const accounts = await web3.eth.getAccounts();
-
-      const accountConnectedToMetaMask = accounts[0];
-
-      console.log("Account Connected to MetaMask:", accountConnectedToMetaMask);
-      console.log("Account used to login        :", window.localStorage["userAddress"])
-      console.log(accountConnectedToMetaMask != window.localStorage["userAddress"]);
-
-      // Always trust the wallet currently selected in MetaMask.
-// localStorage can contain an older wallet after an account switch.
-      const currentAccount = accountConnectedToMetaMask;
-      const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
-      const contractAddress = window.localStorage.Users_ContractAddress;
-      const contract = new window.web3.eth.Contract(contractABI, contractAddress);
-
-      const currentUser = await contract.methods.users(currentAccount).call();
-
-      if (
-        currentUser &&
-        currentUser.userID &&
-        currentUser.userID.toLowerCase() === currentAccount.toLowerCase()
-      ) {
-        // Sync the session to the wallet that is actually connected.
-        localStorage.setItem("userAddress", currentAccount);
-        window.userAddress = currentAccount;
-
-        console.log("Wallet verified:", currentAccount);
-
-        fetchUserDetails();
-        fetchPropertiesOfOwner();
-      } else {
-        // This wallet is not registered yet.
-        localStorage.removeItem("userAddress");
-        window.userAddress = null;
-        window.location.href = "/";
-      }
-
-    } catch (error) {
-
-      alert(error);
-
-    }
-
-  } else {
-    alert("Please Add Metamask extension for your browser !!");
+  if (!window.ethereum) {
+    alert("Please Add MetaMask extension to your browser !!");
+    return;
   }
 
+  try {
+    window.web3 = new Web3(window.ethereum);
+
+    // Always ask MetaMask for the wallet currently connected to this site.
+    const accounts = await window.ethereum.request({
+      method: "eth_requestAccounts"
+    });
+
+    if (!accounts || accounts.length === 0) {
+      localStorage.removeItem("userAddress");
+      window.location.href = "/";
+      return;
+    }
+
+    const currentAccount = accounts[0];
+
+    const contractABI = JSON.parse(window.localStorage.Users_ContractABI);
+    const contractAddress = window.localStorage.Users_ContractAddress;
+    const contract = new window.web3.eth.Contract(contractABI, contractAddress);
+
+    const currentUser = await contract.methods.users(currentAccount).call();
+
+    if (
+      currentUser &&
+      currentUser.userID &&
+      currentUser.userID.toLowerCase() === currentAccount.toLowerCase()
+    ) {
+      localStorage.setItem("userAddress", currentAccount);
+      window.userAddress = currentAccount;
+
+      fetchUserDetails(currentAccount);
+      fetchPropertiesOfOwner(currentAccount);
+    } else {
+      // Never display data belonging to another wallet.
+      localStorage.removeItem("userAddress");
+      window.userAddress = null;
+      const nameButton = document.getElementById("nameOfUser");
+      if (nameButton) nameButton.innerText = "";
+
+      window.location.href = "/";
+    }
+
+  } catch (error) {
+    console.error("Wallet connection failed:", error);
+    localStorage.removeItem("userAddress");
+    window.location.href = "/";
+  }
 }
 
 
+// Handle MetaMask account switching while dashboard is open.
+if (window.ethereum) {
+  window.ethereum.on("accountsChanged", function(accounts) {
+    localStorage.removeItem("userAddress");
+    window.userAddress = null;
 
-async function fetchUserDetails() {
+    if (!accounts || accounts.length === 0) {
+      window.location.href = "/";
+      return;
+    }
+
+    // Re-run the wallet selection flow for the newly selected account.
+    window.location.href = "/";
+  });
+}
+
+
+async function fetchUserDetails(accountAddress) {
 
   let contractABI = JSON.parse(window.localStorage.Users_ContractABI);
   let contractAddress = window.localStorage.Users_ContractAddress;
 
   let contract = new window.web3.eth.Contract(contractABI, contractAddress);
 
-  let accountUsedToLogin = window.localStorage["userAddress"];
+  let accountUsedToLogin = accountAddress || window.localStorage["userAddress"];
 
   userDetails = await contract.methods.users(accountUsedToLogin)
     .call()
@@ -249,14 +262,14 @@ async function addProperty(event) {
 }
 
 
-async function fetchPropertiesOfOwner() {
+async function fetchPropertiesOfOwner(accountAddress) {
   let contractABI = JSON.parse(window.localStorage.LandRegistry_ContractABI);
 
   let contractAddress = window.localStorage.LandRegistry_ContractAddress;
 
   let contract = new window.web3.eth.Contract(contractABI, contractAddress);
 
-  let accountUsedToLogin = window.localStorage["userAddress"];
+  let accountUsedToLogin = accountAddress || window.localStorage["userAddress"];
 
   try {
 
