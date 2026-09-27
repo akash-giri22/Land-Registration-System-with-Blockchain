@@ -62,7 +62,12 @@ async function fetchUserDetails() {
       });
 
 
-  if (userDetails["userID"] == accountUsedToLogin) {
+  if (
+    userDetails &&
+    userDetails["userID"] &&
+    accountUsedToLogin &&
+    userDetails["userID"].toLowerCase() === accountUsedToLogin.toLowerCase()
+  ) {
 
     document.getElementById("nameOfUser").innerText = userDetails["firstName"];
 
