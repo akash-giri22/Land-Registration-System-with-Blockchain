@@ -86,17 +86,40 @@ def login():
                             "empName":"Revenue Department Admin"
                             })
 
-        user = employeesTable.find_one({"adminAddress":employeeId})
+        # Demo-mode employee login fallback. This keeps the revenue workflow usable
+        # when Render has no external MongoDB configured yet.
+        employee_store = os.path.join(os.path.dirname(__file__), "employee_store.json")
+        user = None
+        if os.path.exists(employee_store):
+            try:
+                with open(employee_store, "r") as f:
+                    employees = json.load(f)
+                user = employees.get(employeeId.lower())
+            except Exception:
+                user = None
 
         if user and check_password_hash(user['password'], password):
-            session['user_id'] = str(user['_id'])
+            session['user_id'] = "employee-" + employeeId.lower()
             return jsonify({'status':1,
                             "msg":'Login Success',
                             "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'),
-                            "empName":user.get('fname', 'Revenue Department Admin')
+                            "empName":user.get('fname', 'Revenue Department Employee')
                             })
-        else:
-            return jsonify({'status':0,"msg":'Invalid Wallet or password'})
+
+        # Keep MongoDB login available when Atlas is configured.
+        try:
+            user = employeesTable.find_one({"employeeId":employeeId})
+            if user and check_password_hash(user['password'], password):
+                session['user_id'] = str(user['_id'])
+                return jsonify({'status':1,
+                                "msg":'Login Success',
+                                "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'),
+                                "empName":user.get('fname', 'Revenue Department Employee')
+                                })
+        except Exception:
+            pass
+
+        return jsonify({'status':0,"msg":'Invalid Wallet or password'})
 
     else:
         return jsonify({'status':0,"msg":'GET Not allowed'})
@@ -238,44 +261,61 @@ def addEmployee():
         lname = request.form['lname']
         revenueDeptId = request.form['revenueDeptId']
 
-
-        emp = {
-            "employeeId":employeeId,
-            "password":generate_password_hash(password),
-            "fname":fname,
-            "lname":lname,
-            "revenueDeptId":revenueDeptId
-        }
-
         try:
+            # First map the employee wallet on-chain. This is the important
+            # blockchain operation for the revenue workflow.
+            res = mapRevenueDeptIdToEmployee(revenueDeptId, employeeId)
 
-            # add to mongo db database
-            result = employeesTable.insert_one(emp)
+            if not res:
+                return jsonify({'status':0, "msg":"Blockchain mapping transaction failed"})
 
-            
-            # make transaction to map revenue dept id to employee address
-            res = mapRevenueDeptIdToEmployee(revenueDeptId,employeeId)
+            # Save a small local employee store so the demo works on Render
+            # even before MongoDB Atlas is configured.
+            employee_store = os.path.join(os.path.dirname(__file__), "employee_store.json")
+            employees = {}
+            if os.path.exists(employee_store):
+                try:
+                    with open(employee_store, "r") as f:
+                        employees = json.load(f)
+                except Exception:
+                    employees = {}
 
-            if res:
-                return jsonify({
-                            'status':1,
-                            "msg":f"Employee '{fname}' Added Successfully"
-                            })
-            else:
-                return jsonify({
-                            'status':0,
-                            "msg":f"Transaction Failed"
-                            })
+            employees[employeeId.lower()] = {
+                "employeeId": employeeId,
+                "password": generate_password_hash(password),
+                "fname": fname,
+                "lname": lname,
+                "revenueDeptId": revenueDeptId
+            }
+
+            with open(employee_store, "w") as f:
+                json.dump(employees, f, indent=2)
+
+            # Also try MongoDB when it is available, but do not block the
+            # blockchain demo if MongoDB is not configured on Render.
+            try:
+                employeesTable.insert_one({
+                    "employeeId":employeeId,
+                    "password":generate_password_hash(password),
+                    "fname":fname,
+                    "lname":lname,
+                    "revenueDeptId":revenueDeptId
+                })
+            except Exception:
+                pass
+
+            return jsonify({
+                'status':1,
+                "msg":f"Employee '{fname}' Added Successfully"
+            })
 
         except Exception as e:
             return jsonify({
-                            'status':0,
-                            "msg": str(e)
-                         })
+                'status':0,
+                "msg": str(e)
+            })
 
-    else:
-        return jsonify({'status':0,"msg":'GET Not allowed'})
-
+    return jsonify({'status':0,"msg":'GET Not allowed'})
 
 
 
