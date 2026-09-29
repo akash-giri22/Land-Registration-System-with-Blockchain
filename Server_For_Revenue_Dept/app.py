@@ -24,70 +24,33 @@ config["Mongo_Db_Url"] = os.environ.get("MONGO_DB_URL", config.get("Mongo_Db_Url
 config["Secret_Key"] = os.environ.get("SECRET_KEY", config.get("Secret_Key", "RevenueDept$123"))
 config["Ganache_Url"] = os.environ.get("GANACHE_URL", config.get("Ganache_Url", "http://127.0.0.1:8545"))
 
-
-
-# admin address
 adminAddress = config["Address_Used_To_Deploy_Contract"]
-
-# admin password
 adminPassword = config["Admin_Password"]
-
-
-# blockchain Network ID
 NETWORK_CHAIN_ID = str(config["NETWORK_CHAIN_ID"])
 
-
-
-# connect to mong db
 client = MongoClient(config["Mongo_Db_Url"], serverSelectionTimeoutMS=3000, connectTimeoutMS=3000)
-
-# connect to database
 LandRegistryDB = client.LandRegistry
-
-# connect to file System
 fs = gridfs.GridFS(LandRegistryDB)
-
-# property collection
 propertyDocsTable = LandRegistryDB.Property_Docs
-
-# employee collection
 employeesTable = client.Revenue_Dept.Employees
 
-
-# flask app
 app = Flask(__name__)
-
-
-# flask secret key
 app.secret_key = config["Secret_Key"]
-
-
 
 @app.route('/')
 def index():
-    # Render the 'index.html' template with the variables passed in
     return render_template('index.html')
-
-
 
 @app.route("/login", methods=['POST'])
 def login():
-
     if request.method == 'POST':
         employeeId = request.form['employeeId']
         password = request.form['password']
 
-        # Bootstrap admin login from Render environment variables.
         if employeeId == adminAddress and adminPassword and password == adminPassword:
             session['user_id'] = 'render-admin'
-            return jsonify({'status':1,
-                            "msg":'Login Success',
-                            "revenueDepartmentId":"ADMIN",
-                            "empName":"Revenue Department Admin"
-                            })
+            return jsonify({'status':1, "msg":'Login Success', "revenueDepartmentId":"ADMIN", "empName":"Revenue Department Admin"})
 
-        # Demo-mode employee login fallback. This keeps the revenue workflow usable
-        # when Render has no external MongoDB configured yet.
         employee_store = os.path.join(os.path.dirname(__file__), "employee_store.json")
         user = None
         if os.path.exists(employee_store):
@@ -100,160 +63,105 @@ def login():
 
         if user and check_password_hash(user['password'], password):
             session['user_id'] = "employee-" + employeeId.lower()
-            return jsonify({'status':1,
-                            "msg":'Login Success',
-                            "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'),
-                            "empName":user.get('fname', 'Revenue Department Employee')
-                            })
+            return jsonify({'status':1, "msg":'Login Success', "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'), "empName":user.get('fname', 'Revenue Department Employee')})
 
-        # Keep MongoDB login available when Atlas is configured.
         try:
             user = employeesTable.find_one({"employeeId":employeeId})
             if user and check_password_hash(user['password'], password):
                 session['user_id'] = str(user['_id'])
-                return jsonify({'status':1,
-                                "msg":'Login Success',
-                                "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'),
-                                "empName":user.get('fname', 'Revenue Department Employee')
-                                })
+                return jsonify({'status':1, "msg":'Login Success', "revenueDepartmentId":user.get('revenueDeptId', 'ADMIN'), "empName":user.get('fname', 'Revenue Department Employee')})
         except Exception:
             pass
 
         return jsonify({'status':0,"msg":'Invalid Wallet or password'})
-
-    else:
-        return jsonify({'status':0,"msg":'GET Not allowed'})
-
+    return jsonify({'status':0,"msg":'GET Not allowed'})
 
 @app.route('/logout')
 def logout():
     session.pop('user_id', None)
     return redirect('/')
 
-
 @app.route('/dashboard')
 def dashboard():
     if 'user_id' in session:
         return render_template('dashboard.html')
-    else:
-        return redirect('/')
-
+    return redirect('/')
 
 @app.route('/propertiesDocs/pdf/<propertyId>')
 def get_pdf(propertyId):
-  try:
     try:
-        propertyDetails = propertyDocsTable.find({"Property_Id":"%s"%(propertyId)})[0]
-        
-    except IndexError as e:
-        return jsonify({"status":0,"Reason":"No Property Matched With Id"})
+        propertyDetails = propertyDocsTable.find_one({"Property_Id": str(propertyId)})
 
-    fileName = "%s_%s.pdf"%(propertyDetails['Owner'],propertyDetails['Property_Id'])
-    
-    file = fs.get(propertyDetails[fileName])
+        if not propertyDetails:
+            return jsonify({"status":0, "Reason":"No Property Matched With Id"})
 
-    response = Response(file, content_type='application/pdf')
-    response.headers['Content-Disposition'] = f'inline; filename="{file.filename}"'
-    
-    return response
+        fileName = "%s_%s.pdf" % (propertyDetails.get('Owner', ''), propertyDetails.get('Property_Id', propertyId))
 
-  except Exception as e:
-    return jsonify({"status":0,"Reason":str(e)})
+        # Prefer the legacy Property_Docs reference when present.
+        file_id = propertyDetails.get(fileName)
 
+        # If the reference field is missing, find the migrated GridFS file directly.
+        if not file_id:
+            migrated_filename = "Blockchain_Land_Record_%s.pdf" % propertyId
+            grid_file = fs.find_one({"filename": migrated_filename})
+            if grid_file:
+                file_id = grid_file._id
 
+        if not file_id:
+            # Last fallback: locate the expected owner/property PDF by filename.
+            grid_file = fs.find_one({"filename": fileName})
+            if grid_file:
+                file_id = grid_file._id
 
+        if not file_id:
+            return jsonify({"status":0, "Reason":"PDF file not found in GridFS"})
 
+        file = fs.get(file_id)
+        response = Response(file, content_type='application/pdf')
+        response.headers['Content-Disposition'] = f'inline; filename="{file.filename}"'
+        return response
 
+    except Exception as e:
+        return jsonify({"status":0, "Reason":str(e)})
 
 @app.route('/fetchContractDetails')
 def fetchContractDetails():
-    usersContract = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "Users.json"
-                    ).read()
-        )
-    
-    landRegistryContract = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "LandRegistry.json"
-                    ).read()
-        )
-
-    transferOwnerShip = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "TransferOwnerShip.json"
-                    ).read()
-        )
+    usersContract = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"Users.json").read())
+    landRegistryContract = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"LandRegistry.json").read())
+    transferOwnerShip = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"TransferOwnerShip.json").read())
 
     response = {}
-
-    response["Users"] = {}
-    response["Users"]["address"] = usersContract["networks"][NETWORK_CHAIN_ID]["address"]
-    response["Users"]["abi"] = usersContract["abi"]
-
-    response["LandRegistry"]  = {}
-    response["LandRegistry"]["address"] = landRegistryContract["networks"][NETWORK_CHAIN_ID]["address"]
-    response["LandRegistry"]["abi"] = landRegistryContract["abi"]
-
-    response["TransferOwnership"]  = {}
-    response["TransferOwnership"]["address"] = transferOwnerShip["networks"][NETWORK_CHAIN_ID]["address"]
-    response["TransferOwnership"]["abi"] = transferOwnerShip["abi"]
-
-
+    response["Users"] = {"address": usersContract["networks"][NETWORK_CHAIN_ID]["address"], "abi": usersContract["abi"]}
+    response["LandRegistry"] = {"address": landRegistryContract["networks"][NETWORK_CHAIN_ID]["address"], "abi": landRegistryContract["abi"]}
+    response["TransferOwnership"] = {"address": transferOwnerShip["networks"][NETWORK_CHAIN_ID]["address"], "abi": transferOwnerShip["abi"]}
     return response
-
-
 
 @app.route('/admin')
 def adminIndexPage():
     return render_template('admin.html')
 
-
-
-
-
 @app.route("/adminLogin", methods=['POST'])
 def adminLogin():
-
     if request.method == 'POST':
         adminAddressForm = request.form['adminAddress']
         password = request.form['password']
 
-        # Bootstrap admin login from Render environment variables.
         if adminAddressForm == adminAddress and adminPassword and password == adminPassword:
             session['user_id'] = 'render-admin'
-            return jsonify({'status':1,
-                            "msg":'Admin Login Success'
-                            })
+            return jsonify({'status':1, "msg":'Admin Login Success'})
 
         admin = employeesTable.find_one({'adminAddress': adminAddressForm})
-
         if admin and check_password_hash(admin['password'], password):
             session['user_id'] = str(admin['_id'])
-            return jsonify({'status':1,
-                            "msg":'Admin Login Success'
-                            })
-        else:
-            return jsonify({'status':0,"msg":'Invalid Wallet or password'})
-
-    else:
-        return jsonify({'status':0,"msg":'GET Not allowed'})
-
-
-
+            return jsonify({'status':1, "msg":'Admin Login Success'})
+        return jsonify({'status':0,"msg":'Invalid Wallet or password'})
+    return jsonify({'status':0,"msg":'GET Not allowed'})
 
 @app.route("/addEmployee", methods=['POST'])
 def addEmployee():
-    
     if 'user_id' not in session:
         return jsonify({'status':0,"msg":'Login Required'})
-   
+
     if request.method == 'POST':
         employeeId = request.form['empAddress']
         password = request.form['password']
@@ -262,15 +170,10 @@ def addEmployee():
         revenueDeptId = request.form['revenueDeptId']
 
         try:
-            # First map the employee wallet on-chain. This is the important
-            # blockchain operation for the revenue workflow.
             res = mapRevenueDeptIdToEmployee(revenueDeptId, employeeId)
-
             if not res:
                 return jsonify({'status':0, "msg":"Blockchain mapping transaction failed"})
 
-            # Save a small local employee store so the demo works on Render
-            # even before MongoDB Atlas is configured.
             employee_store = os.path.join(os.path.dirname(__file__), "employee_store.json")
             employees = {}
             if os.path.exists(employee_store):
@@ -291,8 +194,6 @@ def addEmployee():
             with open(employee_store, "w") as f:
                 json.dump(employees, f, indent=2)
 
-            # Also try MongoDB when it is available, but do not block the
-            # blockchain demo if MongoDB is not configured on Render.
             try:
                 employeesTable.insert_one({
                     "employeeId":employeeId,
@@ -304,50 +205,24 @@ def addEmployee():
             except Exception:
                 pass
 
-            return jsonify({
-                'status':1,
-                "msg":f"Employee '{fname}' Added Successfully"
-            })
-
+            return jsonify({'status':1, "msg":f"Employee '{fname}' Added Successfully"})
         except Exception as e:
-            return jsonify({
-                'status':0,
-                "msg": str(e)
-            })
+            return jsonify({'status':0, "msg":str(e)})
 
     return jsonify({'status':0,"msg":'GET Not allowed'})
 
-
-
-
-
 if __name__ == '__main__':
-
-    # Check Admin Account is Created or Not
     if((adminAddress is not None) and (adminPassword is not None)):
-
         admin = employeesTable.find_one({'adminAddress': adminAddress})
-
-        # admin account not added to employees table
         if admin is None:
             print("\nAdding Admin Details To Database")
-
-            admin = {
-                "adminAddress":adminAddress,
-                "password":generate_password_hash(adminPassword)
-            }
-
-
+            admin = {"adminAddress":adminAddress, "password":generate_password_hash(adminPassword)}
             adminId = employeesTable.insert_one(admin).inserted_id
-
             if adminId is not None:
                 print("Added Successfully")
             else:
                 print("Failed to add Details")
                 exit(0)
-       
-        # Start Server
         app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5001)))
-
     else:
         print("Admin Address Details Not found in Configuration file")
