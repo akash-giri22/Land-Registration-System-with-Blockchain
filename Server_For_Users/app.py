@@ -5,148 +5,116 @@ from web3 import Web3, HTTPProvider
 import json
 import os
 
-
-# blockchain Network ID
 NETWORK_CHAIN_ID = "31337"
 
-
-
-
-# connect to mong db
 MONGO_DB_URL = os.environ.get("MONGO_DB_URL", "mongodb://localhost:27017")
-client = MongoClient(MONGO_DB_URL)
-
-# connect to database
+client = MongoClient(MONGO_DB_URL, serverSelectionTimeoutMS=3000, connectTimeoutMS=3000)
 LandRegistryDB = client.LandRegistry
-
-# connect to file System
 fs = gridfs.GridFS(LandRegistryDB)
-
-# connect to collection
 propertyDocsTable = LandRegistryDB.Property_Docs
-
-
 
 app = Flask(
     __name__,
-    static_url_path='', 
+    static_url_path='',
     static_folder='web/static',
     template_folder='web/templates'
 )
 
-
-
-
-
 @app.route('/')
 def index():
-    # Render the 'index.html' template with the variables passed in
     return render_template('index.html')
-
 
 @app.route('/register')
 def register():
     return render_template('register.html')
 
-
 @app.route('/dashboard')
 def dashboard():
     return render_template('dashboard.html',add_property=True)
 
-
-
 @app.route('/uploadPropertyDocs', methods=['POST'])
 def upload():
-    # Get the uploaded files and form data from the request
     registraionDocs = request.files['propertyDocs']
     owner = request.form['owner']
     propertyId = request.form['propertyId']
-
-    # Do something with the uploaded files and form data
-
     try:
         file_id = fs.put(registraionDocs, filename="%s_%s.pdf"%(owner,propertyId))
-        rowId = propertyDocsTable.insert_one({
-                                            "Owner":owner,
-                                            "Property_Id":propertyId,
-                                            "%s_%s.pdf"%(owner,propertyId):file_id
-                                        }).inserted_id
-
-    except errors.PyMongoError as e:
-        # Return a response to the client
+        propertyDocsTable.insert_one({
+            "Owner":owner,
+            "Property_Id":propertyId,
+            "%s_%s.pdf"%(owner,propertyId):file_id
+        })
+    except Exception:
         return jsonify({'status': 'Failed Uploading Files','fileId':str(0)})
-    else:
-        return jsonify({'status': 'success','fileId':str(file_id)})
-    
-                                    
+    return jsonify({'status': 'success','fileId':str(file_id)})
 
 @app.route('/propertiesDocs/pdf/<propertyId>')
 def get_pdf(propertyId):
-  try:
     try:
-        propertyDetails = propertyDocsTable.find({"Property_Id":"%s"%(propertyId)})[0]
-        
-    except IndexError as e:
-        return jsonify({"status":0,"Reason":"No Property Matched With Id"})
+        propertyDetails = propertyDocsTable.find_one({"Property_Id": str(propertyId)})
 
-    fileName = "%s_%s.pdf"%(propertyDetails['Owner'],propertyDetails['Property_Id'])
-    
-    file = fs.get(propertyDetails[fileName])
+        if not propertyDetails:
+            return jsonify({"status":0,"Reason":"No Property Matched With Id"})
 
-    response = Response(file, content_type='application/pdf')
-    response.headers['Content-Disposition'] = f'inline; filename="{file.filename}"'
-    
-    return response
+        fileName = "%s_%s.pdf" % (
+            propertyDetails.get("Owner", ""),
+            propertyDetails.get("Property_Id", propertyId)
+        )
 
-  except Exception as e:
-    return jsonify({"status":0,"Reason":str(e)})
+        # Existing/legacy Property_Docs reference.
+        file_id = propertyDetails.get(fileName)
 
+        # Migrated records use Blockchain_Land_Record_<id>.pdf in GridFS.
+        if not file_id:
+            grid_file = fs.find_one({
+                "filename": "Blockchain_Land_Record_%s.pdf" % propertyId
+            })
+            if grid_file:
+                file_id = grid_file._id
 
+        # Final fallback: look for the expected owner/property filename.
+        if not file_id:
+            grid_file = fs.find_one({"filename": fileName})
+            if grid_file:
+                file_id = grid_file._id
 
+        if not file_id:
+            return jsonify({"status":0,"Reason":"PDF file not found in GridFS"})
+
+        file = fs.get(file_id)
+        response = Response(file, content_type='application/pdf')
+        response.headers['Content-Disposition'] = f'inline; filename="{file.filename}"'
+        return response
+
+    except Exception as e:
+        return jsonify({"status":0,"Reason":str(e)})
 
 @app.route('/fetchContractDetails')
 def fetchContractDetails():
-    usersContract = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "Users.json"
-                    ).read()
-        )
-    
-    landRegistryContract = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "LandRegistry.json"
-                    ).read()
-        )
-
-    transferOwnerShip = json.loads(
-            open(
-                    os.getcwd()+
-                    "/../"+"Smart_contracts/build/contracts/"+
-                    "TransferOwnerShip.json"
-                    ).read()
-        )
+    usersContract = json.loads(open(
+        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"Users.json"
+    ).read())
+    landRegistryContract = json.loads(open(
+        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"LandRegistry.json"
+    ).read())
+    transferOwnerShip = json.loads(open(
+        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"TransferOwnerShip.json"
+    ).read())
 
     response = {}
-
-    response["Users"] = {}
-    response["Users"]["address"] = usersContract["networks"][NETWORK_CHAIN_ID]["address"]
-    response["Users"]["abi"] = usersContract["abi"]
-
-    response["LandRegistry"]  = {}
-    response["LandRegistry"]["address"] = landRegistryContract["networks"][NETWORK_CHAIN_ID]["address"]
-    response["LandRegistry"]["abi"] = landRegistryContract["abi"]
-
-    response["TransferOwnership"]  = {}
-    response["TransferOwnership"]["address"] = transferOwnerShip["networks"][NETWORK_CHAIN_ID]["address"]
-    response["TransferOwnership"]["abi"] = transferOwnerShip["abi"]
-
-
+    response["Users"] = {
+        "address": usersContract["networks"][NETWORK_CHAIN_ID]["address"],
+        "abi": usersContract["abi"]
+    }
+    response["LandRegistry"] = {
+        "address": landRegistryContract["networks"][NETWORK_CHAIN_ID]["address"],
+        "abi": landRegistryContract["abi"]
+    }
+    response["TransferOwnership"] = {
+        "address": transferOwnerShip["networks"][NETWORK_CHAIN_ID]["address"],
+        "abi": transferOwnerShip["abi"]
+    }
     return response
-
 
 @app.route('/logout')
 def logout():
@@ -155,8 +123,6 @@ def logout():
 @app.route('/availableToBuy')
 def availableToBuy():
     return render_template('availableToBuy.html')
-
-
 
 @app.route('/MySales')
 def MySales():
