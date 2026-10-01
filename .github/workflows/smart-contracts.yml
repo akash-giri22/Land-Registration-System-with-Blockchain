@@ -41,3 +41,9 @@ jobs:
 
       - name: Run tests
         run: npm test -- --network development
+
+      - name: Upload compiled contract artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-contract-artifacts
+          path: Smart_contracts/build/contracts/*.json
