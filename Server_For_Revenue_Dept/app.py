@@ -40,7 +40,7 @@ app = Flask(__name__)
 app.secret_key = config["Secret_Key"]
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "true").lower() == "true",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
     SESSION_COOKIE_SAMESITE="Lax",
 )
 
