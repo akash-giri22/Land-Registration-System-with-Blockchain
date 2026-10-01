@@ -62,75 +62,7 @@ contract LandRegistry{
         transferOwnershipContractAddressUpdated = true;
 
         propertiesContract.setTransferOwnershipContractAddress(contractAddress);
-    }X-License-Identifier: MIT
-pragma solidity >=0.4.22 <0.9.0;
-
-
-import "./Properties.sol";
-
-contract LandRegistry{
-
-    address private contractOwner;
-    address private transferOwnershipContractAddress;
-    bool private transferOwnershipContractAddressUpdated = false;
-
-    Property public propertiesContract;
-    
-    
-    constructor(){
-        contractOwner = msg.sender;
-        transferOwnershipContractAddress = address(0);
-        transferOwnershipContractAddressUpdated = false;
-        propertiesContract = new Property();
     }
-
-    // modifiers 
-
-    modifier onlyOwner() {
-        require(msg.sender == contractOwner, "Caller is not the owner");
-        _;
-    }
-
-
-    modifier onlyRevenueDeptEmployee(uint256 revenueDeptId) {
-        require(msg.sender == revenueDeptIdToEmployee[revenueDeptId], "Only the revenue department employee can call this function.");
-        _;
-    }
-
-    // events
-    event LandAdded(address indexed owner,uint256 indexed propertyId);
-
-
-
-    // mapping owner and thier properties
-    mapping(address => uint256[]) private propertiesOfOwner;
-
-    // mapping revenue Department and properties under control of them 
-    // for verification procedures
-    mapping(uint256 => uint256[]) private propertiesControlledByRevenueDept;
-
-
-    
-    // mapping of revenue department id to employee address
-    mapping (uint256 => address) public revenueDeptIdToEmployee;
-
-
-    function setTransferOwnershipContractAddress(
-        address contractAddress
-        ) public {
-            
-            // This function can be called only once 
-            require(transferOwnershipContractAddressUpdated==false,"Allowed Only Once to call");
-            
-            // setting contract address
-            transferOwnershipContractAddress = contractAddress;
-
-            // Make transferOwnership contrat updated as True 
-            // So,that no body calls it again
-            transferOwnershipContractAddressUpdated = true;
-    }
-
-
 
 
     // add Land and maps to owner
