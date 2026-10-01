@@ -49,7 +49,7 @@ def login():
 
         if employeeId == adminAddress and adminPassword and password == adminPassword:
             session['user_id'] = 'render-admin'
-            return jsonify({'status':1, "msg":'Login Success', "revenueDepartmentId":"ADMIN", "empName":"Revenue Department Admin"})
+            return jsonify({'status':1, "msg":'Login Success', "revenueDepartmentId":"101", "empName":"Revenue Department Admin"})
 
         employee_store = os.path.join(os.path.dirname(__file__), "employee_store.json")
         user = None
