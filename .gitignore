@@ -6,3 +6,9 @@ __pycache__/
 *.backup.txt
 
 Server_For_Revenue_Dept/config.json
+
+.env
+.env.*
+!.env.example
+Server_For_Revenue_Dept/employee_store.json
+.DS_Store
