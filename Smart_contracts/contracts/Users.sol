@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.4.22 <0.9.0;
+pragma solidity ^0.8.18;
 
 contract Users {
   
@@ -7,14 +7,14 @@ contract Users {
         address userID;
         string firstName;
         string lastName;
-        string dateOfBirth;
-        string aadharNumber;
+        bytes32 dateOfBirthHash;
+        bytes32 aadharHash;
         uint256 accountCreatedDateTime;
     }
 
     mapping(address => bool) private registeredUsers;
     mapping(address => User) public users;
-    mapping(string => bool) private aadharNumbers;
+    mapping(bytes32 => bool) private aadharHashes;
     
     event UserRegistered(address indexed userID, uint256 indexed accountCreatedDateTime);
 
@@ -24,41 +24,56 @@ contract Users {
         string memory _dateOfBirth,
         string memory _aadharNumber
     ) public {
-        require(registeredUsers[msg.sender] == false, "User already registered");
-        require(aadharNumbers[_aadharNumber] == false, "Aadhar number already registered");
+        require(!registeredUsers[msg.sender], "User already registered");
+        require(bytes(_aadharNumber).length == 12, "Aadhar must contain 12 digits");
+
+        bytes memory aadharBytes = bytes(_aadharNumber);
+        for (uint256 i = 0; i < aadharBytes.length; i++) {
+            require(
+                aadharBytes[i] >= 0x30 && aadharBytes[i] <= 0x39,
+                "Aadhar must contain only digits"
+            );
+        }
+
+        bytes32 aadharHash = keccak256(abi.encodePacked(_aadharNumber));
+        require(!aadharHashes[aadharHash], "Aadhar number already registered");
 
         User memory newUser = User({
             userID: msg.sender,
             firstName: _firstName,
             lastName: _lastName,
-            dateOfBirth: _dateOfBirth,
-            aadharNumber: _aadharNumber,
+            dateOfBirthHash: keccak256(abi.encodePacked(_dateOfBirth)),
+            aadharHash: aadharHash,
             accountCreatedDateTime: block.timestamp
         });
 
         users[msg.sender] = newUser;
         registeredUsers[msg.sender] = true;
-        aadharNumbers[_aadharNumber] = true;
+        aadharHashes[aadharHash] = true;
 
         emit UserRegistered(msg.sender, block.timestamp);
     }
 
 
     function getUserDetails(
-            address _userId
-        ) public view returns (
-            string memory firstName, 
-            string memory lastName, 
-            string memory dateOfBirth, 
-            string memory aadharNumber, uint256 accountCreated
-            ) {
-
+        address _userId
+    ) public view returns (
+        string memory firstName, 
+        string memory lastName, 
+        bytes32 dateOfBirthHash,
+        bytes32 aadharHash,
+        uint256 accountCreated
+    ) {
         require(users[_userId].userID != address(0), "User does not exist");
-
 
         User storage user = users[_userId];
 
-        return (user.firstName, user.lastName, user.dateOfBirth, user.aadharNumber, user.accountCreatedDateTime);
-}
-
+        return (
+            user.firstName,
+            user.lastName,
+            user.dateOfBirthHash,
+            user.aadharHash,
+            user.accountCreatedDateTime
+        );
+    }
 }
