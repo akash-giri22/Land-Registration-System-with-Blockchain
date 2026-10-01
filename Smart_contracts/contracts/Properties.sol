@@ -141,7 +141,7 @@ contract Property {
         string memory _scheduledDate,
         string memory _rejectedReason,
         StateOfProperty _state
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
         
         lands[_propertyId].locationId = _locationId;
@@ -159,7 +159,7 @@ contract Property {
     function changeStateToVerifed(
         uint256 _propertyId,
         address _employeeId
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
 
         lands[_propertyId].employeeId = _employeeId;
@@ -170,7 +170,7 @@ contract Property {
         uint256 _propertyId,
         address _employeeId,
         string memory _reason
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
 
         lands[_propertyId].employeeId = _employeeId;
@@ -182,7 +182,7 @@ contract Property {
     function changeStateToOnSale(
         uint256 _propertyId,
         address _owner
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
         require(lands[_propertyId].owner == _owner, "only owner can make available to sell" );
 
@@ -195,7 +195,7 @@ contract Property {
     function changeStateBackToVerificed(
         uint256 _propertyId,
         address _owner
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
         require(lands[_propertyId].owner == _owner, "only owner his allowed" );
 
@@ -206,7 +206,7 @@ contract Property {
     function updateOwner(
         uint256 _propertyId,
         address newOwner
-    ) public {
+    ) public onlyAuthorized {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
 
         // changing new owner
