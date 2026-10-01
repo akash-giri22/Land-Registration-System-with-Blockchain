@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - "Smart_contracts/**"
+      - ".github/workflows/smart-contracts.yml"
   pull_request:
     paths:
       - "Smart_contracts/**"
+      - ".github/workflows/smart-contracts.yml"
 
 jobs:
   test:
