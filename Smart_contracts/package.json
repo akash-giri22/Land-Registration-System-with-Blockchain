@@ -1,0 +1,12 @@
+{
+  "name": "land-registry-smart-contracts",
+  "private": true,
+  "scripts": {
+    "compile": "truffle compile --all",
+    "test": "truffle test"
+  },
+  "devDependencies": {
+    "ganache": "7.9.2",
+    "truffle": "5.11.5"
+  }
+}
