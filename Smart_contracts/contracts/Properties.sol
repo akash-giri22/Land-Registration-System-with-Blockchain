@@ -3,6 +3,38 @@ pragma solidity >=0.4.22 <0.9.0;
 
 
 contract Property {
+
+    address public immutable landRegistry;
+    address public transferOwnershipContract;
+
+    constructor() {
+        landRegistry = msg.sender;
+    }
+
+    modifier onlyLandRegistry() {
+        require(msg.sender == landRegistry, "Only LandRegistry can call");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        require(
+            msg.sender == landRegistry || msg.sender == transferOwnershipContract,
+            "Unauthorized caller"
+        );
+        _;
+    }
+
+    function setTransferOwnershipContractAddress(address _contractAddress)
+        external
+        onlyLandRegistry
+    {
+        require(_contractAddress != address(0), "Invalid transfer contract");
+        require(
+            transferOwnershipContract == address(0),
+            "Transfer contract already set"
+        );
+        transferOwnershipContract = _contractAddress;
+    }
     
 
     // Created   : Represents, inintal state, when property details are added by user
@@ -49,7 +81,7 @@ contract Property {
         uint256 _surveyNumber,
         address _owner,
         uint256 _area
-    ) public returns (uint256) {
+    ) public onlyLandRegistry returns (uint256) {
         landCount++;
 
         lands[landCount] = Land({
@@ -93,7 +125,7 @@ contract Property {
     }
 
     
-    function removeLand(uint256 _propertyId) public {
+    function removeLand(uint256 _propertyId) public onlyLandRegistry {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
         delete lands[_propertyId];
     }
