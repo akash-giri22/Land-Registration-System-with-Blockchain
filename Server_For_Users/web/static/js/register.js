@@ -63,6 +63,11 @@ async function registerUser(event)
   const dob = document.getElementById("dob").value;
   const aadharNo = document.getElementById("aadharNo").value.trim();
 
+  if (!dob) {
+    alertUser("Date of birth is required.", "alert-danger", "block");
+    return;
+  }
+
   if (!/^[0-9]{12}$/.test(aadharNo)) {
     alertUser("Aadhar number must contain exactly 12 digits.", "alert-danger", "block");
     return;
@@ -97,10 +102,29 @@ async function registerUser(event)
       return;
     }
 
-    showTransactionLoading("Registering User...");
+    // Never send raw identity data to the blockchain. Generate salted hashes
+    // in the browser and only submit the resulting bytes32 values.
+    const dobSalt = window.web3.utils.randomHex(32);
+    const aadharSalt = window.web3.utils.randomHex(32);
+
+    const dobHash = window.web3.utils.soliditySha3(
+      { type: "bytes32", value: dobSalt },
+      { type: "string", value: dob }
+    );
+
+    const aadharHash = window.web3.utils.soliditySha3(
+      { type: "bytes32", value: aadharSalt },
+      { type: "string", value: aadharNo }
+    );
+
+    if (!dobHash || !aadharHash) {
+      throw new Error("Unable to protect identity data. Registration was stopped.");
+    }
+
+    showTransactionLoading("Registering User Securely...");
 
     await contract.methods
-      .registerUser(fname, lname, dob, aadharNo)
+      .registerUser(fname, lname, dobHash, aadharHash)
       .send({ from: connectedAccount });
 
     const userDetails = await contract.methods.users(connectedAccount).call();
