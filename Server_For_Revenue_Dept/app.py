@@ -4,7 +4,9 @@ import gridfs
 from web3 import Web3, HTTPProvider
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
-import json 
+import json
+import secrets
+from pathlib import Path 
 
 # our own module
 from utility.mapRevenueDeptToEmployee import mapRevenueDeptIdToEmployee
@@ -21,7 +23,7 @@ config["Address_Used_To_Deploy_Contract"] = os.environ.get("ADDRESS_USED_TO_DEPL
 config["Admin_Password"] = os.environ.get("ADMIN_PASSWORD", config.get("Admin_Password", ""))
 config["NETWORK_CHAIN_ID"] = os.environ.get("NETWORK_CHAIN_ID", config.get("NETWORK_CHAIN_ID", "31337"))
 config["Mongo_Db_Url"] = os.environ.get("MONGO_DB_URL", config.get("Mongo_Db_Url", "mongodb://localhost:27017"))
-config["Secret_Key"] = os.environ.get("SECRET_KEY", config.get("Secret_Key", "RevenueDept$123"))
+config["Secret_Key"] = os.environ.get("SECRET_KEY") or config.get("Secret_Key") or secrets.token_hex(32)
 config["Ganache_Url"] = os.environ.get("GANACHE_URL", config.get("Ganache_Url", "http://127.0.0.1:8545"))
 
 adminAddress = config["Address_Used_To_Deploy_Contract"]
@@ -36,6 +38,18 @@ employeesTable = client.Revenue_Dept.Employees
 
 app = Flask(__name__)
 app.secret_key = config["Secret_Key"]
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "true").lower() == "true",
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
 
 @app.route('/')
 def index():
@@ -126,9 +140,9 @@ def get_pdf(propertyId):
 
 @app.route('/fetchContractDetails')
 def fetchContractDetails():
-    usersContract = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"Users.json").read())
-    landRegistryContract = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"LandRegistry.json").read())
-    transferOwnerShip = json.loads(open(os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"TransferOwnerShip.json").read())
+    usersContract = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "Users.json").read_text())
+    landRegistryContract = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "LandRegistry.json").read_text())
+    transferOwnerShip = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "TransferOwnerShip.json").read_text())
 
     response = {}
     response["Users"] = {"address": usersContract["networks"][NETWORK_CHAIN_ID]["address"], "abi": usersContract["abi"]}
