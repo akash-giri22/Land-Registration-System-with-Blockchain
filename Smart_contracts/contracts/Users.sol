@@ -21,35 +21,26 @@ contract Users {
     function registerUser(
         string memory _firstName,
         string memory _lastName,
-        string memory _dateOfBirth,
-        string memory _aadharNumber
+        bytes32 _dateOfBirthHash,
+        bytes32 _aadharHash
     ) public {
         require(!registeredUsers[msg.sender], "User already registered");
-        require(bytes(_aadharNumber).length == 12, "Aadhar must contain 12 digits");
-
-        bytes memory aadharBytes = bytes(_aadharNumber);
-        for (uint256 i = 0; i < aadharBytes.length; i++) {
-            require(
-                aadharBytes[i] >= 0x30 && aadharBytes[i] <= 0x39,
-                "Aadhar must contain only digits"
-            );
-        }
-
-        bytes32 aadharHash = keccak256(abi.encodePacked(_aadharNumber));
-        require(!aadharHashes[aadharHash], "Aadhar number already registered");
+        require(_dateOfBirthHash != bytes32(0), "Invalid date-of-birth hash");
+        require(_aadharHash != bytes32(0), "Invalid Aadhar hash");
+        require(!aadharHashes[_aadharHash], "Aadhar number already registered");
 
         User memory newUser = User({
             userID: msg.sender,
             firstName: _firstName,
             lastName: _lastName,
-            dateOfBirthHash: keccak256(abi.encodePacked(_dateOfBirth)),
-            aadharHash: aadharHash,
+            dateOfBirthHash: _dateOfBirthHash,
+            aadharHash: _aadharHash,
             accountCreatedDateTime: block.timestamp
         });
 
         users[msg.sender] = newUser;
         registeredUsers[msg.sender] = true;
-        aadharHashes[aadharHash] = true;
+        aadharHashes[_aadharHash] = true;
 
         emit UserRegistered(msg.sender, block.timestamp);
     }
