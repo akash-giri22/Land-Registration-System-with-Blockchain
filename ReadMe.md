@@ -223,3 +223,72 @@ This project contains mainly two steps:
  <img src="readme_assests/10.Buyer making paymet.png" width="400" height="300"> 
  <img src="readme_assests/11.Ownership transferred to buyer.png" width="400" height="300"> 
 
+
+
+---
+
+## Final Hardening & Validation
+
+The final version includes production-oriented hardening while preserving the original demo workflow:
+
+### Smart-contract security
+- `Property` state-changing methods are restricted to the `LandRegistry` and authorized transfer contract.
+- Transfer-contract registration is owner-only and can only happen once.
+- Buyer payment uses a 15-minute payment window.
+- Buyer requests cannot be duplicated while an active request already exists.
+- Purchase offers below the seller's asking price are rejected.
+- Payment requires the sale to be in the accepted state and the exact accepted amount.
+- Ownership/payment completion uses checks-effects-interactions ordering and a reentrancy guard.
+- Successful payment marks the sale complete before external interactions; a failed external interaction reverts the whole transaction.
+- Aadhaar and date-of-birth values are stored as hashes rather than plaintext on-chain.
+
+### Web application hardening
+- MetaMask account and chain changes are detected and the UI is refreshed.
+- The user portal targets Ganache chain ID `31337`.
+- PDF uploads are limited to 10 MB and checked for a real PDF signature.
+- Contract artifact paths are resolved from the application location rather than the process working directory.
+- Security response headers are added to Flask responses.
+- Revenue portal sessions use HttpOnly/SameSite cookies and configurable Secure cookies.
+- Production secrets are supplied through environment variables instead of fixed application defaults.
+
+### Smart-contract tests
+
+From `Smart_contracts`:
+
+```powershell
+npm install
+npm run compile
+npm test
+```
+
+The regression suite verifies transfer-contract authorization, unauthorized Property mutation rejection, price validation, duplicate request protection, seller acceptance, buyer payment, ownership transfer, the `Bought` property state, and the `Success` sale state.
+
+### Fresh final deployment
+
+Because smart-contract source changes require new deployments, rebuild the final test environment:
+
+```powershell
+cd E:\Land-Registration-System-with-Blockchain\Smart_contracts
+
+npx.cmd truffle compile --all
+npx.cmd truffle migrate --reset --network development
+npx.cmd truffle test --network development
+```
+
+After migration, the generated files under `Smart_contracts/build/contracts/` contain the new contract addresses and ABIs. Commit those updated artifacts before deploying the Flask services so the portals use the new deployment.
+
+### Production environment variables
+
+For the Revenue Department service, configure secrets through the hosting platform:
+
+- `ADDRESS_USED_TO_DEPLOY_CONTRACT`
+- `ADMIN_PASSWORD`
+- `NETWORK_CHAIN_ID`
+- `SECRET_KEY`
+- `MONGO_DB_URL`
+- `GANACHE_URL`
+- `COOKIE_SECURE=true`
+
+Do not commit passwords, private keys, MongoDB credentials, seed phrases, or production RPC credentials.
+
+> **Important:** The current Ganache + Cloudflare setup is a controlled demonstration/test environment. A real production deployment should use a persistent managed EVM network/RPC endpoint, audited contracts, monitored infrastructure, encrypted secret management, backups, access controls, and a formal privacy/compliance review before handling real land records or government identity data.
