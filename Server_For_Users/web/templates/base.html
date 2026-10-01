@@ -10,7 +10,7 @@
   <title> {% block title %} {% endblock %} </title>
 
   <link rel="stylesheet" href="css/base.css" media="screen">
-  <link rel="stylesheet" href="css/modern.css?v=20260927" media="screen">
+  <link rel="stylesheet" href="css/modern.css?v=20261001" media="screen">
 
   <script class="u-script" type="text/javascript" src="js/jquery.js" defer=""></script>
   <link id="u-theme-google-font" rel="stylesheet"
@@ -34,6 +34,25 @@
   <!-- contract details -->
   <script src="js/contractsDetails.js"></script>
   <script src="js/web3.min.js"></script>
+
+  <script>
+    // Keep the UI synchronized with the wallet/network selected in MetaMask.
+    // The dapp currently targets Ganache chain ID 31337 (0x7a69).
+    window.expectedChainId = "0x7a69";
+
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", function () {
+        window.location.reload();
+      });
+
+      window.ethereum.on("chainChanged", function (chainId) {
+        if (String(chainId).toLowerCase() !== window.expectedChainId) {
+          alert("Wrong network selected. Please switch MetaMask to the Land Registry Ganache network (chain ID 31337).");
+        }
+        window.location.reload();
+      });
+    }
+  </script>
 
 
   <script type="application/ld+json">{
