@@ -4,6 +4,7 @@ import gridfs
 from web3 import Web3, HTTPProvider
 import json
 import os
+from pathlib import Path
 
 NETWORK_CHAIN_ID = "31337"
 
@@ -20,6 +21,16 @@ app = Flask(
     template_folder='web/templates'
 )
 
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB upload limit
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Cache-Control", "no-store" if request.path.startswith("/propertiesDocs/") else "no-cache")
+    return response
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -34,19 +45,40 @@ def dashboard():
 
 @app.route('/uploadPropertyDocs', methods=['POST'])
 def upload():
-    registraionDocs = request.files['propertyDocs']
-    owner = request.form['owner']
-    propertyId = request.form['propertyId']
+    registraionDocs = request.files.get('propertyDocs')
+    owner = request.form.get('owner', '').strip()
+    propertyId = request.form.get('propertyId', '').strip()
+
+    if not registraionDocs or not registraionDocs.filename:
+        return jsonify({'status': 'Failed Uploading Files', 'reason': 'PDF file is required'}), 400
+    if not propertyId.isdigit() or int(propertyId) <= 0:
+        return jsonify({'status': 'Failed Uploading Files', 'reason': 'Invalid property ID'}), 400
+    if not Web3.isAddress(owner):
+        return jsonify({'status': 'Failed Uploading Files', 'reason': 'Invalid owner wallet address'}), 400
+    if not registraionDocs.filename.lower().endswith('.pdf'):
+        return jsonify({'status': 'Failed Uploading Files', 'reason': 'Only PDF files are allowed'}), 400
+
+    # Validate the PDF signature instead of trusting the client MIME type.
+    header = registraionDocs.stream.read(5)
+    registraionDocs.stream.seek(0)
+    if header != b'%PDF-':
+        return jsonify({'status': 'Failed Uploading Files', 'reason': 'Invalid PDF file'}), 400
+
     try:
-        file_id = fs.put(registraionDocs, filename="%s_%s.pdf"%(owner,propertyId))
+        file_id = fs.put(
+            registraionDocs,
+            filename="%s_%s.pdf" % (owner, propertyId),
+            content_type='application/pdf'
+        )
         propertyDocsTable.insert_one({
-            "Owner":owner,
-            "Property_Id":propertyId,
-            "%s_%s.pdf"%(owner,propertyId):file_id
+            "Owner": owner,
+            "Property_Id": propertyId,
+            "%s_%s.pdf" % (owner, propertyId): file_id
         })
     except Exception:
-        return jsonify({'status': 'Failed Uploading Files','fileId':str(0)})
-    return jsonify({'status': 'success','fileId':str(file_id)})
+        return jsonify({'status': 'Failed Uploading Files', 'fileId': str(0)}), 500
+
+    return jsonify({'status': 'success', 'fileId': str(file_id)})
 
 @app.route('/propertiesDocs/pdf/<propertyId>')
 def get_pdf(propertyId):
