@@ -141,7 +141,7 @@ contract Property {
         string memory _scheduledDate,
         string memory _rejectedReason,
         StateOfProperty _state
-    ) public onlyAuthorized {
+    ) public onlyLandRegistry {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
         
         lands[_propertyId].locationId = _locationId;
