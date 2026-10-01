@@ -1,6 +1,7 @@
 const LandRegistry = artifacts.require("LandRegistry");
 const Property = artifacts.require("Property");
 const TransferOwnerShip = artifacts.require("TransferOwnerShip");
+const Users = artifacts.require("Users");
 
 contract("Land Registry production flow", (accounts) => {
   const [deployer, seller, buyer, revenueEmployee, attacker] = accounts;
@@ -8,15 +9,46 @@ contract("Land Registry production flow", (accounts) => {
   let landRegistry;
   let property;
   let transfer;
+  let users;
 
   const toWei = (value) => web3.utils.toWei(String(value), "ether");
 
   before(async () => {
     landRegistry = await LandRegistry.deployed();
     transfer = await TransferOwnerShip.deployed();
+    users = await Users.deployed();
 
     const propertyAddress = await landRegistry.getPropertiesContract();
     property = await Property.at(propertyAddress);
+  });
+
+  it("registers identity data using hashes only", async () => {
+    const dobHash = web3.utils.soliditySha3(
+      { type: "bytes32", value: web3.utils.randomHex(32) },
+      { type: "string", value: "2000-01-01" }
+    );
+    const aadharHash = web3.utils.soliditySha3(
+      { type: "bytes32", value: web3.utils.randomHex(32) },
+      { type: "string", value: "123456789012" }
+    );
+
+    await users.registerUser("Test", "User", dobHash, aadharHash, {
+      from: attacker
+    });
+
+    const user = await users.users(attacker);
+    assert.equal(user.userID.toLowerCase(), attacker.toLowerCase());
+    assert.equal(user.dateOfBirthHash, dobHash);
+    assert.equal(user.aadharHash, aadharHash);
+
+    try {
+      await users.registerUser("Test", "User2", dobHash, aadharHash, {
+        from: accounts[4]
+      });
+      assert.fail("Duplicate identity hash was accepted");
+    } catch (error) {
+      assert(error.message.includes("Aadhar number already registered"));
+    }
   });
 
   it("wires the ownership-transfer contract securely", async () => {
