@@ -314,47 +314,80 @@ function handleStateOfPurchaseRequestSent(state)
 
 
 
-async function makePayment(saleId,priceOffered){
+async function makePayment(saleId){ 
+  alertUser("", "alert-info", "none");
 
-  alertUser("","alert-info","none");
-     
-  let contractABI = JSON.parse(window.localStorage.TransferOwnership_ContractABI);
+  const contractABI = JSON.parse(window.localStorage.TransferOwnership_ContractABI);
+  const contractAddress = window.localStorage.TransferOwnership_ContractAddress;
+  const contract = new window.web3.eth.Contract(contractABI, contractAddress);
+  const accountUsedToLogin = window.localStorage["userAddress"];
 
-  let contractAddress = window.localStorage.TransferOwnership_ContractAddress;
+  try {
+    const chainId = await window.web3.eth.getChainId();
+    if (Number(chainId) !== 31337) {
+      throw new Error("Wrong network. Please switch MetaMask to Ganache chain ID 31337.");
+    }
 
-  let contract = new window.web3.eth.Contract(contractABI,contractAddress);
+    // Always read the accepted amount and deadline from the blockchain.
+    // Never trust a UI-calculated price for a payable transaction.
+    const requestedSales = await contract.methods
+      .getRequestedSales(accountUsedToLogin)
+      .call();
 
-  let accountUsedToLogin = window.localStorage["userAddress"];
+    const sale = requestedSales.find(
+      item => String(item.saleId) === String(saleId)
+    );
 
-  priceOffered = web3.utils.toWei(String(priceOffered));
-  console.log("saleId:",saleId);
-  console.log("priceOffered:",priceOffered);
+    if (!sale) {
+      throw new Error("Sale request could not be found. Please refresh the page.");
+    }
 
-  try{
+    if (String(sale.state) !== "1") {
+      throw new Error("This sale is no longer waiting for payment.");
+    }
 
-    showTransactionLoading("Payment in progress...");
+    const deadline = Number(sale.deadlineForPayment);
+    const now = Math.floor(Date.now() / 1000);
+    if (!deadline || now >= deadline) {
+      throw new Error("Payment deadline has expired. Please submit a new purchase request.");
+    }
 
-    await contract.methods.transferOwnerShip(
-                                              saleId
-                                            )
-                                            .send(
-                                              {
-                                                from:accountUsedToLogin,
-                                                value:priceOffered
-                                              });
-    
-    closeTransactionLoading()
-    alertUser("Successfully Property Transfered","alert-success","block");
-    fetchMyRequestedSales();
-  }
-  catch(error)
-  {
-    console.error(error);
-    reason = showError(error);
+    const paymentWei = sale.acceptedPrice;
+    if (!paymentWei || paymentWei === "0") {
+      throw new Error("Accepted payment amount is invalid.");
+    }
+
+    const balance = await window.web3.eth.getBalance(accountUsedToLogin);
+    if (window.web3.utils.toBN(balance).lt(window.web3.utils.toBN(paymentWei))) {
+      throw new Error(
+        "Insufficient ETH balance. Please add enough ETH for the property payment and gas."
+      );
+    }
+
+    const minutesLeft = Math.ceil((deadline - now) / 60);
+    showTransactionLoading(
+      "Payment in progress...<br><small>" + minutesLeft + " minute(s) remaining</small>"
+    );
+
+    await contract.methods
+      .transferOwnerShip(saleId)
+      .send({
+        from: accountUsedToLogin,
+        value: paymentWei
+      });
+
     closeTransactionLoading();
-    alertUser(reason,"alert-danger","block");
+    alertUser(
+      "Payment successful. Property ownership has been transferred.",
+      "alert-success",
+      "block"
+    );
+    fetchMyRequestedSales();
+  } catch (error) {
+    console.error("Payment failed:", error);
+    closeTransactionLoading();
+    alertUser(showError(error), "alert-danger", "block");
   }
-
 }
 
 
@@ -515,27 +548,41 @@ function closeTransactionLoading() {
 
 // show error reason to user
 function showError(errorOnTransaction) {
-
-
-  errorCode = errorOnTransaction.code;
-
-  if(errorCode==4001){
-    return "Rejected Transaction";
+  if (!errorOnTransaction) {
+    return "Transaction failed. Please try again.";
   }
-  else{
-    let start = errorOnTransaction.message.indexOf('{');
-    let end = -1;
-  
-    errorObj = JSON.parse(errorOnTransaction.message.slice(start, end));
-  
-    errorObj = errorObj.value.data.data;
-  
-    txHash = Object.getOwnPropertyNames(errorObj)[0];
-  
-    let reason = errorObj[txHash].reason;
-  
-    return reason;
+
+  const code = errorOnTransaction.code ?? errorOnTransaction.rpcCode;
+  if (code === 4001 || code === 53) {
+    return "Transaction rejected in MetaMask.";
   }
+
+  const message = String(
+    errorOnTransaction.reason ||
+    errorOnTransaction.data?.message ||
+    errorOnTransaction.error?.message ||
+    errorOnTransaction.message ||
+    errorOnTransaction
+  );
+
+  const knownReasons = [
+    "Payment deadline has passed",
+    "Payment amount must be equal to accepted price",
+    "Only accepted buyer can complete the sale",
+    "Sale is not accepted",
+    "Payment already completed",
+    "Buyer not found in requested list",
+    "Insufficient funds",
+    "Wrong network"
+  ];
+
+  for (const reason of knownReasons) {
+    if (message.includes(reason)) {
+      return reason;
+    }
+  }
+
+  return message.length > 300 ? message.slice(0, 300) + "..." : message;
 }
 
 
