@@ -27,6 +27,10 @@ module.exports = async function(deployer) {
 
   await deployer.deploy(LandRegistry);
 
-  await deployer.deploy(transferOfOwnership,LandRegistry.address);
+  await deployer.deploy(transferOfOwnership, LandRegistry.address);
+
+  const landRegistry = await LandRegistry.deployed();
+  const transferContract = await transferOfOwnership.deployed();
+  await landRegistry.setTransferOwnershipContractAddress(transferContract.address);
 };
 
