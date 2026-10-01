@@ -43,7 +43,7 @@ contract("Land Registry production flow", (accounts) => {
 
     try {
       await users.registerUser("Test", "User2", dobHash, aadharHash, {
-        from: accounts[4]
+        from: accounts[5]
       });
       assert.fail("Duplicate identity hash was accepted");
     } catch (error) {
