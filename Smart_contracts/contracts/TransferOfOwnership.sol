@@ -7,6 +7,16 @@ import "./LandRegistry.sol";
 
 contract TransferOwnerShip{
 
+    uint256 public constant PAYMENT_WINDOW = 15 minutes;
+    bool private locked;
+
+    modifier nonReentrant() {
+        require(!locked, "Reentrant call");
+        locked = true;
+        _;
+        locked = false;
+    }
+
     // ######################################################################
     //              TRANSFER OWNERSHIP OF PROPERTY
     // ######################################################################
@@ -25,7 +35,6 @@ contract TransferOwnerShip{
         address propertiesContractAddress = LandRegistryContract.getPropertiesContract();  
         propertiesContract = Property(propertiesContractAddress);
 
-        LandRegistryContract.setTransferOwnershipContractAddress(address(this));
     }
    
 
@@ -158,6 +167,7 @@ contract TransferOwnerShip{
     event PurchaseRequestSent(uint256 saleId, address requestedUser, uint256 priceOffered);
 
     event SaleAccepted(uint256 saleId, address buyer, uint256 price, uint256 deadline);
+    event SaleCompleted(uint256 indexed saleId, address indexed buyer, uint256 indexed propertyId, uint256 amount);
 
 
     // ************ FUNCTIONS ************
@@ -175,6 +185,7 @@ contract TransferOwnerShip{
         ) public {
         
         require(msg.sender == propertiesContract.getLandDetailsAsStruct(_propertyId).owner, "Only the owner can put the property on sale.");
+        require(_price > 0, "Sale price must be greater than zero");
 
         // add property id to list of properties that are available to sold on a loaction
         uint256[] storage propertiesOnSale = propertiesOnSaleByLocation[propertiesContract.getLandDetailsAsStruct(_propertyId).locationId];
@@ -327,14 +338,35 @@ contract TransferOwnerShip{
             // Make sure the sale exists
             require(sale.propertyId != 0, "Sale does not exist");
             
-            // Make Sure that Sale is not accepted 
-            require(sale.state == SaleState.Active,"Property Not in Active State to Purchase");
+            // Make sure the sale is active and the buyer is not the seller.
+            require(sale.state == SaleState.Active, "Property Not in Active State to Purchase");
+            require(msg.sender != sale.owner, "Owner cannot buy own property");
+
+            uint256 offeredPrice = convertToWei(_priceOffered);
+            require(offeredPrice >= sale.price, "Offer is below asking price");
+
+            // Prevent duplicate pending requests from the same buyer.
+            for (uint256 j = 0; j < requestedUsers[sale.saleId].length; j++) {
+                if (
+                    requestedUsers[sale.saleId][j].user == msg.sender &&
+                    (
+                        requestedUsers[sale.saleId][j].state ==
+                            RequestedUserToASaleState.SentPurchaseRequest ||
+                        requestedUsers[sale.saleId][j].state ==
+                            RequestedUserToASaleState.ReRequestedPurchaseRequest ||
+                        requestedUsers[sale.saleId][j].state ==
+                            RequestedUserToASaleState.SellerAcceptedPurchaseRequest
+                    )
+                ) {
+                    revert("Buyer already has an active request");
+                }
+            }
 
             // Add the request to the requested users array of sale
             requestedUsers[sale.saleId].push(
                 RequestedUser({
                 user: msg.sender,
-                priceOffered: convertToWei(_priceOffered),
+                priceOffered: offeredPrice,
                 state: RequestedUserToASaleState.SentPurchaseRequest
             }));
             
@@ -385,14 +417,13 @@ contract TransferOwnerShip{
             require(buyerFound, "Buyer not found in requested user array");
 
             require(_price == requestedUsers[sale.saleId][i].priceOffered, "Price sent by seller not equal to price offered by buyer");
-
-
+            require(_price >= sale.price, "Accepted price is below asking price");
 
             // Update the sale object with buyer information
             sale.acceptedFor = _buyer;
             sale.acceptedPrice = _price;
             sale.acceptedTime = block.timestamp;
-            sale.deadlineForPayment = block.timestamp + 5 minutes;
+            sale.deadlineForPayment = block.timestamp + PAYMENT_WINDOW;
             
             sale.state = SaleState.AcceptedToABuyer;
 
@@ -614,6 +645,10 @@ contract TransferOwnerShip{
             
             // Make sure that sale is active state
             require(sale.state == SaleState.Active, "Sale is Not Active");
+        require(msg.sender != sale.owner, "Owner cannot buy own property");
+
+        uint256 offeredPrice = convertToWei(_priceOffered);
+        require(offeredPrice >= sale.price, "Offer is below asking price");
 
              // Gettin index value of buyer in 
             // requestedUsers of a sale to purchase.
@@ -637,7 +672,7 @@ contract TransferOwnerShip{
 
             // Reset Buyer in RequesteUsers of a Sale.
             requestedUsers[sale.saleId][i].state = RequestedUserToASaleState.ReRequestedPurchaseRequest;
-            requestedUsers[sale.saleId][i].priceOffered = convertToWei(_priceOffered);
+            requestedUsers[sale.saleId][i].priceOffered = offeredPrice;
                         
             // Emit an event
             emit PurchaseRequestSent(_saleId, msg.sender, _priceOffered);
@@ -647,63 +682,54 @@ contract TransferOwnerShip{
     // function to transfer owner ship 
     function transferOwnerShip(
         uint256 saleId
-        ) public payable {
+        ) public payable nonReentrant {
 
             Sales storage sale = sales[saleId];
-            
+
+            require(sale.state == SaleState.AcceptedToABuyer, "Sale is not accepted");
+            require(!sale.paymentDone, "Payment already completed");
             require(msg.sender == sale.acceptedFor, "Only accepted buyer can complete the sale");
-
             require(msg.value == sale.acceptedPrice, "Payment amount must be equal to accepted price");
-
             require(block.timestamp <= sale.deadlineForPayment, "Payment deadline has passed");
-            
 
-            // Gettin index value of buyer in 
-            // requestedUsers of a sale to purchase.
             bool buyerFound = false;
-            uint i = 0;
-            for (i = 0; i < requestedUsers[sale.saleId].length; i++) {
+            uint256 buyerIndex = 0;
+            for (uint256 i = 0; i < requestedUsers[sale.saleId].length; i++) {
                 if (requestedUsers[sale.saleId][i].user == msg.sender) {
                     buyerFound = true;
+                    buyerIndex = i;
                     break;
                 }
             }
+            require(buyerFound, "Buyer not found in requested list");
 
-            // checking existed buyer or not
-            require(buyerFound,"Buyer Not found in Requested List");
-            
+            // Effects first: mark the sale complete before external interactions.
+            sale.paymentDone = true;
+            sale.state = SaleState.Success;
+            requestedUsers[sale.saleId][buyerIndex].state =
+                RequestedUserToASaleState.SuccessfullyTransfered;
 
-            // transfer payment to property owner
-            payable(sale.owner).transfer(msg.value);
+            uint256 location = propertiesContract
+                .getLandDetailsAsStruct(sale.propertyId)
+                .locationId;
 
-            // transfer ownership of property to buyer
-            LandRegistryContract.transferOwnership(sale.propertyId, msg.sender);
-            
-           // chaging state of Requested user to successfully transformed
-           requestedUsers[sale.saleId][i].state = RequestedUserToASaleState.SuccessfullyTransfered;
-
-            // Remove sale from availabel sales by location
-
-            uint256 _location = propertiesContract.getLandDetailsAsStruct(sale.propertyId).locationId;
-
-            uint256[] storage propertiesOnSale = propertiesOnSaleByLocation[_location];
-
-            for (i = 0; i < propertiesOnSale.length; i++) {
+            uint256[] storage propertiesOnSale = propertiesOnSaleByLocation[location];
+            for (uint256 i = 0; i < propertiesOnSale.length; i++) {
                 if (propertiesOnSale[i] == sale.saleId) {
                     propertiesOnSale[i] = propertiesOnSale[propertiesOnSale.length - 1];
                     propertiesOnSale.pop();
                     break;
                 }
             }
-            
 
-            sale.state = SaleState.Success;
+            // Transfer ownership only after all local state is finalized.
+            LandRegistryContract.transferOwnership(sale.propertyId, msg.sender);
 
-            // // remove sale from buyer's requested sales
-            // delete requestedSales[msg.sender][saleId];
-            
-            // // emit event
-            // emit SaleCompleted(saleId, msg.sender, sale.acceptedPrice);
+            // Finally release the accepted payment to the previous owner.
+            (bool paid, ) = payable(sale.owner).call{value: msg.value}("");
+            require(paid, "Payment transfer failed");
+
+            emit SaleCompleted(sale.saleId, msg.sender, sale.propertyId, msg.value);
     }
 
 }
