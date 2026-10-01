@@ -116,7 +116,7 @@ async function getStatusOfPurchseRequest(saleId){
 
       buyer = requestedUsersForASale[i]["user"];
 
-      if (buyer == accountUsedToLogin){
+      if (buyer && accountUsedToLogin && buyer.toLowerCase() === accountUsedToLogin.toLowerCase()){
         // covert price to ethers
         price = web3.utils.fromWei(requestedUsersForASale[i]["priceOffered"]);
         state = requestedUsersForASale[i]["state"];
