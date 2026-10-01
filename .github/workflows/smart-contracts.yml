@@ -32,5 +32,10 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Start Ganache
+        run: |
+          npx ganache --server.host 127.0.0.1 --server.port 8545 --chain.chainId 31337 --chain.networkId 31337 --wallet.totalAccounts 10 > /tmp/ganache.log 2>&1 &
+          sleep 5
+
       - name: Run tests
-        run: npm test
+        run: npm test -- --network development
