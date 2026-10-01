@@ -416,6 +416,11 @@ contract TransferOwnerShip{
             }
             require(buyerFound, "Buyer not found in requested user array");
 
+            require(
+                requestedUsers[sale.saleId][i].state == RequestedUserToASaleState.SentPurchaseRequest ||
+                requestedUsers[sale.saleId][i].state == RequestedUserToASaleState.ReRequestedPurchaseRequest,
+                "Buyer request is not active"
+            );
             require(_price == requestedUsers[sale.saleId][i].priceOffered, "Price sent by seller not equal to price offered by buyer");
             require(_price >= sale.price, "Accepted price is below asking price");
 
