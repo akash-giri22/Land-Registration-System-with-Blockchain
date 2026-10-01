@@ -123,15 +123,9 @@ def get_pdf(propertyId):
 
 @app.route('/fetchContractDetails')
 def fetchContractDetails():
-    usersContract = json.loads(open(
-        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"Users.json"
-    ).read())
-    landRegistryContract = json.loads(open(
-        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"LandRegistry.json"
-    ).read())
-    transferOwnerShip = json.loads(open(
-        os.getcwd()+"/../"+"Smart_contracts/build/contracts/"+"TransferOwnerShip.json"
-    ).read())
+    usersContract = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "Users.json").read_text())
+    landRegistryContract = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "LandRegistry.json").read_text())
+    transferOwnerShip = json.loads((Path(__file__).resolve().parent.parent / "Smart_contracts" / "build" / "contracts" / "TransferOwnerShip.json").read_text())
 
     response = {}
     response["Users"] = {
