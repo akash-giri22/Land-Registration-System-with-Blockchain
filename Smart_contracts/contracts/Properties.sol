@@ -79,7 +79,7 @@ contract Property {
 
     // Each location can contain only one property at a time.
     // Zero means the location is currently free.
-    mapping(uint256 => uint256) public propertyIdByLocation;
+
     
     
     
