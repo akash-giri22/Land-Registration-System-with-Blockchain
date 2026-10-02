@@ -69,6 +69,24 @@ contract("Land Registry production flow", (accounts) => {
     }
   });
 
+  it("enforces one property per location ID", async () => {
+    await landRegistry.addLand(1, 101, 8, 48500, { from: seller });
+
+    try {
+      await landRegistry.addLand(1, 101, 9, 27500, { from: buyer });
+      assert.fail("Duplicate location ID was accepted");
+    } catch (error) {
+      assert(error.message.includes("Location ID already occupied"));
+    }
+
+    const propertyForLocation = await property.propertyIdByLocation(1);
+    assert.equal(propertyForLocation.toString(), "1");
+
+    await landRegistry.addLand(2, 101, 9, 27500, { from: buyer });
+    const secondProperty = await property.getLandDetailsAsStruct(2);
+    assert.equal(secondProperty.locationId.toString(), "2");
+  });
+
   it("blocks direct unauthorized Property state mutation", async () => {
     await landRegistry.addLand(1, 101, 8, 48500, { from: seller });
 
