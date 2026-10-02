@@ -88,10 +88,10 @@ contract("Land Registry production flow", (accounts) => {
   });
 
   it("blocks direct unauthorized Property state mutation", async () => {
-    await landRegistry.addLand(1, 101, 8, 48500, { from: seller });
+    await landRegistry.addLand(3, 101, 8, 48500, { from: seller });
 
     try {
-      await property.changeStateToVerifed(1, attacker, { from: attacker });
+      await property.changeStateToVerifed(3, attacker, { from: attacker });
       assert.fail("Unauthorized wallet mutated Property state");
     } catch (error) {
       assert(error.message.includes("Unauthorized caller"));
@@ -155,3 +155,4 @@ contract("Land Registry production flow", (accounts) => {
     assert.equal(completedSale.paymentDone, true, "Payment was not marked complete");
   });
 });
+
