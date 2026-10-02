@@ -70,6 +70,10 @@ contract Property {
     // property Id ==> property
     mapping(uint256 => Land) public lands;
 
+    // Each location can contain only one property at a time.
+    // Zero means the location is currently free.
+    mapping(uint256 => uint256) public propertyIdByLocation;
+
     // used to generate property id
     uint256 private landCount;
     
