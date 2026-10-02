@@ -76,6 +76,10 @@ contract Property {
 
     // used to generate property id
     uint256 private landCount;
+
+    // Each location can contain only one property at a time.
+    // Zero means the location is currently free.
+    mapping(uint256 => uint256) public propertyIdByLocation;
     
     
     
@@ -86,6 +90,12 @@ contract Property {
         address _owner,
         uint256 _area
     ) public onlyLandRegistry returns (uint256) {
+        require(_locationId != 0, "Invalid location ID");
+        require(
+            propertyIdByLocation[_locationId] == 0,
+            "Location ID already occupied"
+        );
+
         landCount++;
 
         lands[landCount] = Land({
@@ -102,6 +112,8 @@ contract Property {
             rejectedReason: "",
             state: StateOfProperty.Created
         });
+        propertyIdByLocation[_locationId] = landCount;
+
         // return propertyId
         return landCount;
     }
@@ -131,7 +143,9 @@ contract Property {
     
     function removeLand(uint256 _propertyId) public onlyLandRegistry {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
+        uint256 locationId = lands[_propertyId].locationId;
         delete lands[_propertyId];
+        delete propertyIdByLocation[locationId];
     }
     
     function updateLand(
@@ -147,6 +161,16 @@ contract Property {
         StateOfProperty _state
     ) public onlyLandRegistry {
         require(lands[_propertyId].propertyId != 0, "Land does not exist");
+        
+        if (_locationId != lands[_propertyId].locationId) {
+            require(_locationId != 0, "Invalid location ID");
+            require(
+                propertyIdByLocation[_locationId] == 0,
+                "Location ID already occupied"
+            );
+            delete propertyIdByLocation[lands[_propertyId].locationId];
+            propertyIdByLocation[_locationId] = _propertyId;
+        }
         
         lands[_propertyId].locationId = _locationId;
         lands[_propertyId].revenueDepartmentId = _revenueDepartmentId;
